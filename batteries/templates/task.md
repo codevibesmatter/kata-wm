@@ -70,6 +70,11 @@ phases:
 
           **GitHub:** #{issue-number} or "no issue"
 
+          If GitHub issue found, claim it:
+          ```bash
+          gh issue edit {N} --remove-label "status:todo" --add-label "status:in-progress"
+          ```
+
           Then: Mark this task completed via TodoWrite
 
   - id: p1
@@ -142,6 +147,7 @@ phases:
 
           **If GitHub issue:**
           ```bash
+          gh issue edit {N} --remove-label "status:in-progress" --add-label "status:done"
           gh issue comment {N} --body "Done. Commit: {commit-sha}"
           # Close if fully resolved:
           gh issue close {N} --comment "Resolved in {commit-sha}"

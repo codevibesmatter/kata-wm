@@ -135,13 +135,19 @@ phases:
         title: "Create or link GitHub issue"
         instruction: |
           **If issue exists:** Update the `github_issue:` frontmatter field.
+          Mark it as spec-in-progress:
+          ```bash
+          gh issue edit {N} --remove-label "status:todo" --add-label "status:in-progress" --add-label "needs-spec"
+          ```
 
           **If creating new issue:**
           ```bash
           gh issue create \
             --title "{feature title}" \
             --body "$(cat planning/specs/{spec-file}.md | head -50)" \
-            --label "feature"
+            --label "feature" \
+            --label "status:in-progress" \
+            --label "needs-spec"
           ```
           Note the issue number. Update spec frontmatter `github_issue:` field.
           Update spec filename to include issue number: `{N}-{slug}.md`
@@ -174,6 +180,11 @@ phases:
       - id: spawn-review-agent
         title: "Spawn spec review agent"
         instruction: |
+          Mark issue as needing review:
+          ```bash
+          gh issue edit {N} --remove-label "needs-spec" --add-label "needs-review"
+          ```
+
           Spawn a review agent to give a second opinion:
 
           Task(subagent_type="spec-writer", prompt="
@@ -210,6 +221,11 @@ phases:
           git add planning/specs/{spec-file}.md
           git commit -m "docs(spec): {feature title} — spec approved"
           git push
+          ```
+
+          Mark issue as approved and ready for implementation:
+          ```bash
+          gh issue edit {N} --remove-label "needs-review" --remove-label "status:in-progress" --add-label "approved" --add-label "status:todo"
           ```
 
       - id: update-issue

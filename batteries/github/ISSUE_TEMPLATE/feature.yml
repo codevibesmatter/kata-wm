@@ -1,7 +1,7 @@
 name: Feature Request
 description: Propose a new feature or enhancement
 title: "[Feature]: "
-labels: ["feature", "status:todo"]
+labels: ["feature", "status:todo", "needs-spec"]
 body:
   - type: textarea
     id: problem

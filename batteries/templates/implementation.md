@@ -67,9 +67,9 @@ phases:
       - id: claim-github-issue
         title: "Claim GitHub issue"
         instruction: |
-          If GitHub issue exists, mark it in-progress:
+          If GitHub issue exists, claim it:
           ```bash
-          gh issue edit {N} --add-label "status:in-progress"
+          gh issue edit {N} --remove-label "status:todo" --remove-label "approved" --add-label "status:in-progress"
           gh issue comment {N} --body "Starting implementation on branch: feature/{issue-number}-{slug}"
           ```
 
@@ -144,18 +144,26 @@ phases:
             --base main
           ```
 
-          Note the PR URL.
+          Note the PR URL. Move issue to in-review:
+          ```bash
+          gh issue edit {N} --remove-label "status:in-progress" --add-label "status:in-review"
+          ```
+
           Then: Mark this task completed via TodoWrite
 
       - id: close-issue
-        title: "Close GitHub issue"
+        title: "Update GitHub issue"
         instruction: |
           If GitHub issue exists:
           ```bash
           gh issue comment {N} --body "Implementation complete. PR: {pr-url}"
           ```
 
-          The issue will auto-close when PR is merged (if "Closes #N" in PR body).
+          The issue will auto-close when PR is merged ("Closes #N" in PR body).
+          On merge, add status:done:
+          ```bash
+          gh issue edit {N} --remove-label "status:in-review" --add-label "status:done"
+          ```
           Then: Mark this task completed via TodoWrite
 
 global_conditions:

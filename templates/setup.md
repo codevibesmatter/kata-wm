@@ -157,10 +157,10 @@ If batteries was chosen during `mode-config`, offer to create the 5 labels requi
 
 ```
 AskUserQuestion(questions=[{
-  question: "Create the 5 required GitHub labels (feature, bug, epic, status:todo, status:in-progress)?",
+  question: "Create GitHub labels for issue tracking? (15 labels: type, priority, status, workflow)",
   header: "Labels",
   options: [
-    {label: "Yes — create labels", description: "Required for issue templates and gh commands to work correctly"},
+    {label: "Yes — create labels", description: "15 labels covering type, priority, status lifecycle, and workflow state"},
     {label: "No — skip", description: "Create labels manually later"}
   ]
 }])

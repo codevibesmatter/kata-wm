@@ -32,8 +32,9 @@ phases:
           If it can't be reproduced: document the conditions and investigate
           the code path anyway using the reported error as the starting point.
 
-          Document your reproduction in the GitHub issue (if one exists):
+          Document your reproduction and claim the issue:
           ```bash
+          gh issue edit {N} --remove-label "status:todo" --add-label "status:in-progress"
           gh issue comment {N} --body "Reproduced: {steps}
           Error: {error message}"
           ```
@@ -236,6 +237,7 @@ phases:
 
           Close GitHub issue:
           ```bash
+          gh issue edit {N} --remove-label "status:in-progress" --add-label "status:done"
           gh issue close {N} --comment "Fixed in {commit-sha}.
           Root cause: {explanation}
           Fix: {what changed}"
