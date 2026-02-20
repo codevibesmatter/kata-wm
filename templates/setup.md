@@ -27,19 +27,21 @@ phases:
       - "AskUserQuestion: Set custom verify command? (default: none)"
   - id: mode-config
     name: "Mode Configuration"
-    description: "Configure mode behavior and paths"
+    description: "Configure mode behavior, paths, and starter content"
     tasks:
       - "AskUserQuestion: Spec files path? (default: planning/specs)"
       - "AskUserQuestion: Research files path? (default: planning/research)"
       - "AskUserQuestion: Session retention days? (default: 7)"
       - "AskUserQuestion: Install strict mode hooks (PreToolUse gates)? (default: no)"
+      - "AskUserQuestion: Install batteries-included starter content? (templates, agents, spec templates)"
   - id: write-config
     name: "Write Configuration"
-    description: "Write wm.yaml and register hooks in settings.json"
+    description: "Write wm.yaml, register hooks, and scaffold batteries if chosen"
     tasks:
       - "Write .claude/workflows/wm.yaml with collected answers"
       - "Register hooks in .claude/settings.json"
       - "Create .claude/sessions/ directory"
+      - "If batteries chosen: run 'wm batteries' to scaffold starter content"
   - id: verify
     name: "Verify Setup"
     description: "Run wm doctor to verify everything is configured correctly"
@@ -60,23 +62,87 @@ The setup interview has 6 phases:
 1. **Bootstrap** — Verify prerequisites and create `.claude/` directory
 2. **Project Discovery** — Auto-detect project settings (name, test command, CI)
 3. **Review Configuration** — Configure code review and verification settings
-4. **Mode Configuration** — Set paths and behavior preferences
-5. **Write Configuration** — Write `wm.yaml` and register hooks
+4. **Mode Configuration** — Set paths, behavior preferences, and batteries option
+5. **Write Configuration** — Write `wm.yaml`, register hooks, scaffold if chosen
 6. **Verify** — Run `wm doctor` to confirm everything works
 
 ## Quick Setup
 
-If you want to skip the interview and use auto-detected defaults:
+Skip the interview and use auto-detected defaults:
 
 ```bash
-wm setup --yes
+wm setup --yes           # Minimal setup
+wm setup --batteries     # Setup + full starter content
 ```
 
 ## What Gets Created
 
+**Always:**
 - `.claude/workflows/wm.yaml` — Project configuration
 - `.claude/settings.json` — Hook registrations (merged with existing)
 - `.claude/sessions/` — Session state directory
+
+**With batteries:**
+- `.claude/workflows/templates/` — 6 full mode templates with GitHub integration
+- `.claude/agents/` — 5 Claude Code sub-agent definitions
+- `planning/spec-templates/` — Feature, epic, and bug spec templates
+
+## Batteries-Included Starter Content
+
+When asked "Install batteries-included starter content?", choosing Yes scaffolds:
+
+**Mode templates** (`.claude/workflows/templates/`):
+| Template | Description |
+|----------|-------------|
+| `planning.md` | Research → spec → GitHub issue → review → approve |
+| `implementation.md` | Claim branch → implement per spec → PR → close issue |
+| `research.md` | Parallel Explore agents → synthesis → research doc |
+| `task.md` | Quick plan → implement → commit with issue close |
+| `debug.md` | Reproduce → hypotheses → trace → minimal fix |
+| `freeform.md` | Free exploration with structured exit patterns |
+
+**Agents** (`.claude/agents/`):
+| Agent | Description |
+|-------|-------------|
+| `spec-writer` | Writes and reviews feature specs |
+| `impl-agent` | Implements a specific spec phase |
+| `test-agent` | Writes tests for spec behaviors |
+| `debug-agent` | Traces bugs to root cause (read-only) |
+| `review-agent` | Reviews code and specs for quality |
+
+**Spec templates** (`planning/spec-templates/`):
+- `feature.md` — Feature spec with behaviors, phases, acceptance criteria
+- `epic.md` — Epic/initiative with features, milestones, success metrics
+- `bug.md` — Bug report with reproduction steps and fix tracking
+
+## The Batteries Question (mode-config phase)
+
+During the interview, you will be asked:
+
+```
+AskUserQuestion(questions=[{
+  question: "Install batteries-included starter content?",
+  header: "Batteries",
+  options: [
+    {
+      label: "Yes — install everything",
+      description: "6 mode templates, 5 agents, 3 spec templates. Best for new projects."
+    },
+    {
+      label: "Yes — templates only",
+      description: "Mode templates only, skip agents and spec templates"
+    },
+    {
+      label: "No — minimal setup",
+      description: "Just wm.yaml and hooks. Add content manually later with: wm batteries"
+    }
+  ],
+  multiSelect: false
+}])
+```
+
+If **Yes**: run `wm batteries` (or `wm batteries --templates-only`) after writing config.
+If **No**: skip. User can run `wm batteries` at any time later.
 
 ## Hooks Installed
 

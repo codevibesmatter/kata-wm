@@ -24,6 +24,7 @@ import { suggest } from './commands/suggest.js'
 import { setup } from './commands/setup.js'
 import { teardown } from './commands/teardown.js'
 import { hook } from './commands/hook.js'
+import { batteries } from './commands/batteries.js'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getPackageRoot } from './session/lookup.js'
@@ -130,6 +131,10 @@ async function main() {
         await teardown(commandArgs)
         break
 
+      case 'batteries':
+        await batteries(commandArgs)
+        break
+
       case 'hook':
         await hook(commandArgs)
         break
@@ -185,7 +190,8 @@ Usage:
   wm register-mode <template-path> [options]   Register existing template as mode
   wm suggest <message>                         Detect mode from message, output guidance
   wm doctor [--fix] [--json]                   Diagnose and fix session state
-  wm setup [--yes] [--strict]                  Setup wm in a project
+  wm setup [--yes] [--strict] [--batteries]    Setup wm in a project
+  wm batteries [--cwd=PATH]                    Scaffold batteries-included starter content
   wm teardown [--yes] [--all] [--dry-run]      Remove wm from a project
   wm hook <name>                               Dispatch hook event (for settings.json)
   wm --version                                 Show version
@@ -202,7 +208,9 @@ Hook Dispatch:
 Setup:
   wm setup --yes                Quick setup with auto-detected defaults
   wm setup --yes --strict       Setup with PreToolUse gate hooks
-  wm setup                      Interactive setup interview
+  wm setup --batteries          Setup + scaffold batteries-included starter content
+  wm setup                      Interactive setup interview (asks about batteries)
+  wm batteries                  Scaffold batteries content only (idempotent)
   wm teardown --yes             Remove wm hooks and config
   wm teardown --dry-run         Preview what would be removed
 
