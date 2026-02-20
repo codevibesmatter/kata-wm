@@ -36,13 +36,12 @@ phases:
       - "AskUserQuestion: Install batteries-included starter content? (templates, agents, spec templates)"
   - id: github-setup
     name: "GitHub Setup"
-    description: "Install gh CLI, authenticate, create labels and issue templates"
+    description: "Verify gh CLI is installed and authenticated"
     tasks:
       - "Check gh CLI is installed (gh --version), guide install if missing"
       - "Check gh auth status, run gh auth login if not authenticated"
-      - "AskUserQuestion: Set up GitHub labels and issue templates on this repo?"
-      - "If yes: read .github/wm-labels.json and create each label via gh label create --force"
       - "Confirm .github/ISSUE_TEMPLATE/ files are in place (from batteries scaffold)"
+      - "If batteries was chosen: offer to create the 5 required labels via gh label create --force (feature, bug, epic, status:todo, status:in-progress)"
   - id: write-config
     name: "Write Configuration"
     description: "Write wm.yaml, register hooks, and scaffold batteries if chosen"
@@ -72,7 +71,7 @@ The setup interview has 7 phases:
 2. **Project Discovery** — Auto-detect project settings (name, test command, CI)
 3. **Review Configuration** — Configure code review and verification settings
 4. **Mode Configuration** — Set paths, behavior preferences, and batteries option
-5. **GitHub Setup** — Install `gh` CLI, authenticate, create labels and issue templates
+5. **GitHub Setup** — Verify `gh` CLI, authenticate, confirm issue templates
 6. **Write Configuration** — Write `wm.yaml`, register hooks, scaffold if chosen
 7. **Verify** — Run `wm doctor` to confirm everything works
 
@@ -152,23 +151,24 @@ gh auth login
 ```
 Follow the prompts — choose GitHub.com, HTTPS, browser authentication.
 
-### 3. Create Labels
+### 3. Create Labels (batteries only)
 
-Ask:
+If batteries was chosen during `mode-config`, offer to create the 5 labels required by the issue templates and workflow commands:
+
 ```
 AskUserQuestion(questions=[{
-  question: "Set up GitHub labels on this repo?",
+  question: "Create the 5 required GitHub labels (feature, bug, epic, status:todo, status:in-progress)?",
   header: "Labels",
   options: [
-    {label: "Yes — create all labels", description: "17 labels: type, priority, status, review"},
+    {label: "Yes — create labels", description: "Required for issue templates and gh commands to work correctly"},
     {label: "No — skip", description: "Create labels manually later"}
   ]
 }])
 ```
 
-If yes, read `.github/wm-labels.json` and create each label:
+If yes:
 ```bash
-# For each label in wm-labels.json:
+# Read .github/wm-labels.json and create each label:
 gh label create "{name}" --color "{color}" --description "{description}" --force
 ```
 

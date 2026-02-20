@@ -1,21 +1,7 @@
 [
-  { "name": "feature",          "color": "0075ca", "description": "New feature or enhancement" },
-  { "name": "bug",              "color": "d73a4a", "description": "Something isn't working" },
-  { "name": "epic",             "color": "7057ff", "description": "Large initiative spanning multiple features" },
-  { "name": "chore",            "color": "e4e669", "description": "Maintenance, refactoring, or tooling" },
-
-  { "name": "P0",               "color": "b60205", "description": "Critical — drop everything" },
-  { "name": "P1",               "color": "e99695", "description": "High priority" },
-  { "name": "P2",               "color": "f9d0c4", "description": "Medium priority" },
-  { "name": "P3",               "color": "fef2c0", "description": "Low priority / nice to have" },
-
-  { "name": "status:todo",      "color": "ededed", "description": "Not yet started" },
-  { "name": "status:in-progress","color": "0e8a16","description": "Actively being worked on" },
-  { "name": "status:in-review", "color": "006b75", "description": "In review / staging" },
-  { "name": "status:done",      "color": "0075ca", "description": "Completed" },
-  { "name": "status:blocked",   "color": "b60205", "description": "Blocked by dependency or decision" },
-
-  { "name": "needs-spec",       "color": "d4c5f9", "description": "Requires a spec before implementation" },
-  { "name": "needs-review",     "color": "fbca04", "description": "Awaiting review" },
-  { "name": "approved",         "color": "0e8a16", "description": "Spec or PR approved" }
+  { "name": "feature",           "color": "0075ca", "description": "New feature or enhancement" },
+  { "name": "bug",               "color": "d73a4a", "description": "Something isn't working" },
+  { "name": "epic",              "color": "7057ff", "description": "Large initiative spanning multiple features" },
+  { "name": "status:todo",       "color": "ededed", "description": "Not yet started" },
+  { "name": "status:in-progress","color": "0e8a16", "description": "Actively being worked on" }
 ]
