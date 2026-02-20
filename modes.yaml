@@ -1,0 +1,329 @@
+# Generic mode definitions for @baseplane/wm package
+# Project-specific modes should be defined in .claude/workflows/modes.yaml
+
+modes:
+  # --- Core Modes (6 generic) ---
+
+  research:
+    name: "Research"
+    description: "Explore → synthesize findings"
+    intent_keywords:
+      - "research"
+      - "explore"
+      - "learn about"
+    strong_signals:
+      - "research mode"
+      - "let's research"
+      - "explore options"
+      - "investigate how"
+    template: "research.md"
+    category: investigation
+    behavior:
+      bias: "act"
+      entry_actions:
+        - check: "topic clear"
+          then: "enter research mode, create research doc"
+        - check: "related to existing issue"
+          then: "link research to that issue"
+      never_ask:
+        - question: "What do you want to research?"
+          instead: "Infer topic from message"
+        - question: "Should I create a research doc?"
+          instead: "Yes, always create one"
+      ok_to_ask:
+        - "Multiple possible research directions"
+
+  planning:
+    name: "Planning"
+    description: "Research → spec → review → approved"
+    intent_keywords:
+      - "plan feature"
+      - "spec"
+      - "design"
+      - "write spec"
+    strong_signals:
+      - "planning mode"
+      - "enter planning"
+      - "start planning"
+      - "plan feature"
+      - "write a spec"
+    template: "planning.md"
+    category: planning
+    behavior:
+      bias: "act"
+      entry_actions:
+        - check: "issue number in message"
+          then: "enter mode with that issue"
+        - check: "no issue"
+          then: "create issue from inferred title, enter mode"
+      never_ask:
+        - question: "Do you have an issue number?"
+          instead: "Create one if missing"
+        - question: "Should I create an issue?"
+          instead: "Yes, always create if missing"
+      ok_to_ask:
+        - "Ambiguous scope (multiple possible features)"
+        - "Destructive action (overwrite existing spec)"
+
+  implementation:
+    name: "Implementation"
+    description: "Execute approved specs - phases defined in spec YAML frontmatter"
+    intent_keywords:
+      - "implement"
+      - "build"
+      - "code"
+      - "develop"
+      - "execute spec"
+    strong_signals:
+      - "implementation mode"
+      - "implement issue"
+      - "implement #"
+      - "start implementing"
+      - "build feature"
+      - "impl"
+    template: "implementation.md"
+    category: implementation
+    behavior:
+      bias: "act"
+      entry_actions:
+        - check: "issue number provided"
+          then: "enter mode with that issue"
+        - check: "spec file mentioned"
+          then: "extract issue from spec path, enter mode"
+      never_ask:
+        - question: "Which issue?"
+          instead: "Use most recently planned, or infer from context"
+        - question: "Should I read the spec first?"
+          instead: "Yes, always read the spec"
+      ok_to_ask:
+        - "Multiple specs match the topic"
+        - "Spec is marked draft/incomplete"
+
+  task:
+    name: "Task"
+    description: "Combined planning + implementation for small tasks and chores"
+    intent_keywords:
+      - "task:"
+      - "chore"
+      - "small task"
+      - "quick change"
+      - "cleanup"
+      - "refactor"
+    template: "task.md"
+    workflow_prefix: "TK"
+    category: implementation
+    aliases:
+      - "chore"
+      - "small"
+    behavior:
+      bias: "act"
+      entry_actions:
+        - check: "task: or chore: prefix"
+          then: "enter task mode immediately, no issue needed"
+        - check: "issue number provided"
+          then: "link to that issue, enter task mode"
+        - check: "no issue and clear scope"
+          then: "just do it, issue optional for small tasks"
+      never_ask:
+        - question: "Should I create an issue?"
+          instead: "Skip for small tasks, just do the work"
+        - question: "Do you want me to plan this first?"
+          instead: "Task mode combines planning + implementation"
+      ok_to_ask:
+        - "Scope unclear (task seems larger than expected)"
+        - "Multiple valid approaches with real tradeoffs"
+
+  freeform:
+    name: "Freeform"
+    description: "Quick questions and discussion (no phases)"
+    intent_keywords:
+      - "question"
+      - "how does"
+      - "what is"
+      - "where is"
+      - "explain"
+      - "help me understand"
+    strong_signals:
+      - "quick question"
+      - "just wondering"
+      - "can you explain"
+      - "freeform"
+    template: "freeform.md"
+    workflow_prefix: "FF"
+    category: investigation
+    aliases:
+      - "question"
+      - "ask"
+      - "help"
+      - "qa"
+    behavior:
+      bias: "act"
+      entry_actions:
+        - check: "always"
+          then: "enter freeform immediately, no issue needed"
+      never_ask:
+        - question: "Do you want freeform mode?"
+          instead: "Just enter it"
+        - question: "Should I create an issue?"
+          instead: "No, freeform doesn't need issues"
+      ok_to_ask:
+        - "Genuinely ambiguous request"
+
+  setup:
+    name: "Setup"
+    description: "Configure wm for a new project via guided interview"
+    intent_keywords:
+      - "setup wm"
+      - "configure wm"
+      - "initialize wm"
+      - "wm setup"
+    template: "setup.md"
+    category: system
+
+  # --- Deprecated Redirects ---
+  # These modes have been removed from the generic package.
+  # Project-level modes.yaml can override them with full implementations.
+
+  strategic:
+    name: "Strategic Planning (DEPRECATED)"
+    description: "(DEPRECATED) Use planning mode instead"
+    deprecated: true
+    redirect_to: "planning"
+    template: "planning.md"
+    category: planning
+
+  doctrine:
+    name: "Doctrine (DEPRECATED)"
+    description: "(DEPRECATED) Use planning mode instead"
+    deprecated: true
+    redirect_to: "planning"
+    template: "planning.md"
+    category: planning
+
+  feature-clarification:
+    name: "Feature Clarification (DEPRECATED)"
+    description: "(DEPRECATED) Use planning mode instead"
+    deprecated: true
+    redirect_to: "planning"
+    template: "feature-clarification.md"
+    category: planning
+
+  micro-planning:
+    name: "Micro-Planning (DEPRECATED)"
+    description: "(DEPRECATED) Use planning mode instead"
+    deprecated: true
+    redirect_to: "planning"
+    template: "planning.md"
+    category: planning
+
+  bugfix:
+    name: "Bug Fix (DEPRECATED)"
+    description: "(DEPRECATED) Use implementation mode instead"
+    deprecated: true
+    redirect_to: "implementation"
+    template: "implementation.md"
+    category: implementation
+
+  hotfix:
+    name: "Hotfix (DEPRECATED)"
+    description: "(DEPRECATED) Use implementation mode instead"
+    deprecated: true
+    redirect_to: "implementation"
+    template: "implementation-hotfix.md"
+    category: implementation
+
+  debug:
+    name: "Debug (DEPRECATED)"
+    description: "(DEPRECATED) Use research mode instead"
+    deprecated: true
+    redirect_to: "research"
+    template: "debug.md"
+    category: investigation
+
+  management:
+    name: "Management (DEPRECATED)"
+    description: "(DEPRECATED) Use freeform mode instead"
+    deprecated: true
+    redirect_to: "freeform"
+    template: "freeform.md"
+    category: management
+
+  orchestrator:
+    name: "Orchestrator (DEPRECATED)"
+    description: "(DEPRECATED) Use task mode instead"
+    deprecated: true
+    redirect_to: "task"
+    template: "task.md"
+    category: special
+
+  dedicated-testing:
+    name: "Dedicated Testing (DEPRECATED)"
+    description: "(DEPRECATED) Use task mode instead"
+    deprecated: true
+    redirect_to: "task"
+    template: "implementation-testing.md"
+    category: special
+
+  calibration:
+    name: "Calibration (DEPRECATED)"
+    description: "(DEPRECATED) Use freeform mode instead"
+    deprecated: true
+    redirect_to: "freeform"
+    template: "freeform.md"
+    category: planning
+
+  session-discovery:
+    name: "Session Discovery (DEPRECATED)"
+    description: "(DEPRECATED) Use research mode instead"
+    deprecated: true
+    redirect_to: "research"
+    template: "research.md"
+    category: system
+
+  flow:
+    name: "Flow State (DEPRECATED)"
+    description: "(DEPRECATED) Use freeform mode instead"
+    deprecated: true
+    redirect_to: "freeform"
+    template: "freeform.md"
+    category: special
+    aliases:
+      - "flow-state"
+
+# Categories for grouping
+categories:
+  planning:
+    name: "Planning"
+    description: "Spec creation and task breakdown"
+  implementation:
+    name: "Implementation"
+    description: "Code execution from specs"
+  investigation:
+    name: "Investigation"
+    description: "Research and debugging"
+  management:
+    name: "Management"
+    description: "Project oversight"
+  special:
+    name: "Special"
+    description: "Specialized workflows"
+  system:
+    name: "System"
+    description: "System configuration and maintenance"
+
+# Global behavioral rules - apply across all modes
+global_behavior:
+  never_ask_globally:
+    - "Are you sure?"
+    - "Would you like me to..."
+    - "Which option would you prefer?"
+    - "Should I proceed?"
+    - "Do you want me to..."
+  ask_when:
+    - "Genuinely ambiguous (multiple valid interpretations)"
+    - "Destructive action (delete, overwrite, force push)"
+    - "External side effects (email, deploy to prod)"
+    - "Conflicting instructions"
+  inference:
+    title_from_message: "Extract noun phrase after plan/implement/fix"
+    issue_from_message: "Look for #NNN, GH#NNN, issue NNN"

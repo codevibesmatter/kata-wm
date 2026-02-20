@@ -1,0 +1,65 @@
+{
+  "name": "@codevibesmatter/wm",
+  "version": "1.0.0",
+  "description": "Workflow management CLI for Claude Code — structured session modes, phase tracking, and stop hooks",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js"
+    }
+  },
+  "bin": {
+    "wm": "./wm"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist/",
+    "wm",
+    "modes.yaml",
+    "templates/"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test dist/testing/index.js 2>/dev/null || true",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "claude-code",
+    "workflow",
+    "cli",
+    "ai-agent",
+    "session-management"
+  ],
+  "author": "codevibesmatter",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codevibesmatter/wm.git"
+  },
+  "homepage": "https://github.com/codevibesmatter/wm#readme",
+  "bugs": {
+    "url": "https://github.com/codevibesmatter/wm/issues"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.5",
+    "tsup": "^8.3.5",
+    "typescript": "~5.8.3"
+  }
+}

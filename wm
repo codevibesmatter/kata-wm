@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+#
+# wm - Workflow Management CLI
+#
+# Type-safe state management for Claude Code workflow sessions.
+# Uses built dist/index.js (Node.js) when installed via npm.
+# Falls back to Bun + src/index.ts for local development.
+#
+# Usage:
+#   wm enter <mode>                 Enter a mode (creates phase tasks)
+#   wm status [--json]              Show current mode and phase
+#   wm exit                         Exit current mode
+#   wm can-exit                     Check if exit conditions met
+#   wm prime                        Output context injection block
+#   wm help                         Show help
+
+set -euo pipefail
+
+# Resolve symlinks so that npm .bin/ symlinks point to the real package directory
+_wm_script="${BASH_SOURCE[0]}"
+while [[ -L "$_wm_script" ]]; do
+  _wm_dir="$(cd -P "$(dirname "$_wm_script")" && pwd)"
+  _wm_script="$(readlink "$_wm_script")"
+  [[ "$_wm_script" != /* ]] && _wm_script="$_wm_dir/$_wm_script"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_wm_script")" && pwd)"
+unset _wm_script _wm_dir
+DIST_JS="$SCRIPT_DIR/dist/index.js"
+
+# Primary: use built dist/index.js with Node (npm install path)
+if [[ -f "$DIST_JS" ]]; then
+  node "$DIST_JS" "$@"
+  exit $?
+fi
+
+# Fallback: use Bun to run TypeScript directly (local development, no build)
+CLI_TS="$SCRIPT_DIR/src/index.ts"
+
+if ! command -v bun &> /dev/null; then
+  if [[ -x "$HOME/.bun/bin/bun" ]]; then
+    export PATH="$HOME/.bun/bin:$PATH"
+  else
+    echo "Error: dist/index.js not found and Bun not available." >&2
+    echo "Run 'pnpm build' to build the package first, or install Bun: https://bun.sh" >&2
+    exit 1
+  fi
+fi
+
+bun "$CLI_TS" "$@"
