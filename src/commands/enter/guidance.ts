@@ -186,8 +186,8 @@ export function buildWorkflowGuidance(
       `Reference the spec for detailed requirements: ${specPath}/<issue>-*.md`,
       '',
       'Commands:',
-      '  wm status                           # Check current mode and phase',
-      '  wm can-exit                         # Check if exit conditions met',
+      '  kata status                           # Check current mode and phase',
+      '  kata can-exit                         # Check if exit conditions met',
     )
   } else if (mode === 'planning') {
     workflow.push(
@@ -195,8 +195,8 @@ export function buildWorkflowGuidance(
       'Reference template: packages/workflow-management/templates/planning-feature.md',
       '',
       'Commands:',
-      '  wm status                           # Check current mode and phase',
-      '  wm can-exit                         # Check if exit conditions met',
+      '  kata status                           # Check current mode and phase',
+      '  kata can-exit                         # Check if exit conditions met',
     )
   } else {
     workflow.push(
@@ -204,14 +204,14 @@ export function buildWorkflowGuidance(
       `Reference template: packages/workflow-management/templates/${mode}.md`,
       '',
       'Commands:',
-      '  wm status                           # Check current mode and phase',
-      '  wm can-exit                         # Check if exit conditions met',
+      '  kata status                           # Check current mode and phase',
+      '  kata can-exit                         # Check if exit conditions met',
     )
   }
 
   const commands = {
-    listTasks: 'wm status',
-    pendingTasks: 'wm can-exit',
+    listTasks: 'kata status',
+    pendingTasks: 'kata can-exit',
     completeWithEvidence: 'Mark task completed via TodoWrite',
   }
 

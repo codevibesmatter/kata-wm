@@ -129,8 +129,9 @@ async function handleSessionStart(input: Record<string, unknown>): Promise<void>
   const sessionId = input.session_id as string | undefined
 
   // Import and run init (silently capture its output)
+  // Always force-reset on SessionStart so /clear doesn't carry over stale mode state
   const { init } = await import('./init.js')
-  const initArgs: string[] = []
+  const initArgs: string[] = ['--force']
   if (sessionId) initArgs.push(`--session=${sessionId}`)
   await captureConsoleLog(() => init(initArgs))
 
@@ -202,7 +203,7 @@ async function handleModeGate(input: Record<string, unknown>): Promise<void> {
             hookEventName: 'PreToolUse',
             permissionDecision: 'deny',
             permissionDecisionReason:
-              'Enter a mode first: wm enter <mode>. Write operations are blocked until a mode is active.',
+              'Enter a mode first: ./kata enter <mode>. Write operations are blocked until a mode is active.',
           },
         })
         return
@@ -215,12 +216,14 @@ async function handleModeGate(input: Record<string, unknown>): Promise<void> {
   if (toolName === 'Bash' && sessionId) {
     const command = (toolInput.command as string) ?? ''
     // Match `kata` as a top-level command: at start, or after ;/&&/||/|
-    // Avoids false-positives on kata appearing inside string literals
-    const kataAsCommand = /(?:^|[;&|]\s*)((?:\.\/|(?:\/\S+\/)*)kata)\s/.exec(command)
-    if (kataAsCommand && !command.includes('--session=') && !/\bkata\s+hook\b/.test(command)) {
-      // Append --session=<id> after the first kata subcommand invocation
+    // Supports bare `kata`, `./kata`, or absolute path `/some/path/kata`
+    const kataAsCommand = /(?:^|[;&|]\s*)((?:\.\/|(?:\/\S+\/)*)kata(?:-\S*)?)(?=\s+\w)/.exec(command)
+    if (kataAsCommand && !command.includes('--session=') && !/kata\s+hook\b/.test(command)) {
+      // Inject --session after the matched kata subcommand (e.g. `kata enter` → `kata enter --session=ID`)
+      const kataPath = kataAsCommand[1]
+      const escapedPath = kataPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const injected = command.replace(
-        /(\bkata\s+\S+)/,
+        new RegExp(`(${escapedPath}\\s+\\S+)`),
         `$1 --session=${sessionId}`,
       )
       outputJson({

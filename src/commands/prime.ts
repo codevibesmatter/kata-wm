@@ -84,11 +84,11 @@ ${modeTable}
 ## Commands
 
 \`\`\`bash
-wm enter <mode>                       # Enter a mode
-wm enter implementation --issue=123   # Issue-backed from spec
-wm link <issue-num>                   # Link session to issue mid-session
-wm status                             # Check current mode and phase
-wm can-exit                           # Check stop conditions
+kata enter <mode>                       # Enter a mode
+kata enter implementation --issue=123  # Issue-backed from spec
+kata link <issue-num>                   # Link session to issue mid-session
+kata status                             # Check current mode and phase
+kata can-exit                           # Check stop conditions
 \`\`\`
 
 **NEVER skip mode entry.** Work without a mode loses tracking, context, and guidance.`

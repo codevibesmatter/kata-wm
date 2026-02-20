@@ -286,7 +286,7 @@ function buildCommand(
   message: string,
 ): string {
   if (context.hasIssueNumber) {
-    return `wm enter ${mode} --issue=${context.issueNumber}`
+    return `kata enter ${mode} --issue=${context.issueNumber}`
   }
 
   // For modes that need issues, suggest creation
@@ -294,11 +294,11 @@ function buildCommand(
   if (issueRequiredModes.includes(mode)) {
     const title = inferTitle(message)
     const type = mode === 'bugfix' ? 'bug' : 'feature'
-    return `bgh create --type=${type} --title="${title}" && wm enter ${mode} --issue=<NEW_ISSUE>`
+    return `gh issue create --title="${title}" && kata enter ${mode} --issue=<NEW_ISSUE>`
   }
 
   // Modes that don't need issues
-  return `wm enter ${mode}`
+  return `kata enter ${mode}`
 }
 
 /**
@@ -444,7 +444,7 @@ export async function suggest(args: string[]): Promise<void> {
 
 **⚠️ Enter a mode before proceeding:**
 
-\`wm enter <mode>\`
+\`kata enter<mode>\`
 
 ## Available Modes
 ${modeList}
@@ -473,8 +473,8 @@ Pick the mode that matches the user's intent.`,
 
 Redirecting to **${redirectConfig.name}** mode.
 
-\`wm enter ${modeConfig.redirect_to}\``,
-        command: `wm enter ${modeConfig.redirect_to}`,
+\`kata enter${modeConfig.redirect_to}\``,
+        command: `kata enter${modeConfig.redirect_to}`,
         behavior: redirectConfig.behavior || null,
       }
       // biome-ignore lint/suspicious/noConsole: intentional CLI output
