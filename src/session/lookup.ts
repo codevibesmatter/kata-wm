@@ -179,8 +179,10 @@ export function getTemplatesDir(): string {
  * Resolve a template path
  * Priority:
  * 1. Absolute path - use as-is
- * 2. Project-level custom template (.claude/workflows/templates/) - if exists
- * 3. Package built-in template (packages/workflow-management/templates/)
+ * 2. Project-level template (.claude/workflows/templates/) - required
+ *
+ * Package templates are seeds for `wm setup` only.
+ * After setup, the project owns all templates — no package fallback at runtime.
  * @param templatePath - Template filename or path
  * @returns Absolute path to template
  * @throws Error if template not found
@@ -194,27 +196,26 @@ export function resolveTemplatePath(templatePath: string): string {
     throw new Error(`Template not found: ${templatePath}`)
   }
 
-  // Check project-level custom template first
+  // Project-level template (required — no package fallback)
   try {
     const projectRoot = findClaudeProjectDir()
     const projectTemplate = path.join(projectRoot, '.claude/workflows/templates', templatePath)
     if (existsSync(projectTemplate)) {
       return projectTemplate
     }
-  } catch {
-    // No project found, fall through to package templates
+    throw new Error(
+      `Template not found: ${templatePath}\n` +
+        `Expected at: .claude/workflows/templates/${templatePath}\n` +
+        `Run 'wm setup' to initialize project templates.`,
+    )
+  } catch (err) {
+    if ((err as Error).message.includes('Template not found')) {
+      throw err
+    }
+    // No Claude project dir found
+    throw new Error(
+      `Template not found: ${templatePath}\n` +
+        `Not in a Claude project. Run 'wm setup' to initialize.`,
+    )
   }
-
-  // Package built-in template
-  const packageTemplate = path.join(getTemplatesDir(), templatePath)
-  if (existsSync(packageTemplate)) {
-    return packageTemplate
-  }
-
-  throw new Error(
-    `Template not found: ${templatePath}\n` +
-      `Searched:\n` +
-      `  - .claude/workflows/templates/${templatePath}\n` +
-      `  - packages/workflow-management/templates/${templatePath}`,
-  )
 }
