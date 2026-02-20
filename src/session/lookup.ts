@@ -1,6 +1,6 @@
 // Session ID lookup utilities
 import * as path from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 /**
@@ -57,18 +57,48 @@ export function findClaudeProjectDir(): string {
   )
 }
 
+// UUID v4 pattern (Claude Code session IDs)
+const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 /**
  * Get current Claude Code session ID.
  *
- * Session ID comes from hook stdin JSON (input.session_id) — hooks must
- * extract it there and pass it explicitly via --session=ID to subcommands.
+ * Resolution order:
+ * 1. --session=ID flag (handled by callers before reaching here)
+ * 2. Scan .claude/sessions/ for the most recently modified state.json
+ *    (the active session is always the most recently touched one)
+ * 3. Throws if no sessions exist
  *
- * This function is a last-resort fallback for callers that don't receive
- * session_id from hook input. It always throws — callers must pass --session.
- *
- * @throws Error always — use --session=ID flag instead
+ * @throws Error if no session ID can be determined
  */
 export async function getCurrentSessionId(): Promise<string> {
+  try {
+    const projectDir = findClaudeProjectDir()
+    const sessionsDir = path.join(projectDir, '.claude', 'sessions')
+    if (!existsSync(sessionsDir)) {
+      throw new Error('no sessions dir')
+    }
+    const entries = readdirSync(sessionsDir, { withFileTypes: true })
+    const candidates = entries
+      .filter((e) => e.isDirectory() && SESSION_ID_RE.test(e.name))
+      .map((e) => {
+        const stateFile = path.join(sessionsDir, e.name, 'state.json')
+        try {
+          const { mtimeMs } = statSync(stateFile)
+          return { id: e.name, mtimeMs }
+        } catch {
+          return null
+        }
+      })
+      .filter((x): x is { id: string; mtimeMs: number } => x !== null)
+      .sort((a, b) => b.mtimeMs - a.mtimeMs)
+
+    if (candidates[0]) {
+      return candidates[0].id
+    }
+  } catch {
+    // fall through
+  }
   throw new Error(
     'Session ID not available. Pass --session=SESSION_ID explicitly.\n' +
       'Hook handlers receive session_id from stdin JSON and must forward it.',

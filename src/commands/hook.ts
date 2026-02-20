@@ -4,16 +4,15 @@
 import { execSync } from 'node:child_process'
 import { getStateFilePath, findClaudeProjectDir } from '../session/lookup.js'
 import { readState, stateExists } from '../state/reader.js'
-import { loadModesConfig } from '../config/cache.js'
-import { loadWmConfig } from '../config/wm-config.js'
 import { readNativeTaskFiles } from './enter/task-factory.js'
 import type { SessionState } from '../state/schema.js'
 
 /**
  * Claude Code hook output format
  *
- * Decision hooks (PreToolUse, Stop): decision goes at TOP LEVEL, lowercase
- * Context hooks (SessionStart, UserPromptSubmit): use hookSpecificOutput
+ * PreToolUse: use hookSpecificOutput.permissionDecision (top-level decision is deprecated for this event)
+ * Stop/PostToolUse/UserPromptSubmit: use top-level decision: "block"
+ * Context hooks (SessionStart, UserPromptSubmit): use hookSpecificOutput.additionalContext
  */
 type HookOutput =
   | {
@@ -24,6 +23,10 @@ type HookOutput =
       hookSpecificOutput: {
         hookEventName: string
         additionalContext?: string
+        // PreToolUse-specific fields
+        permissionDecision?: 'allow' | 'deny' | 'ask'
+        permissionDecisionReason?: string
+        updatedInput?: Record<string, unknown>
       }
     }
 
@@ -131,53 +134,16 @@ async function handleSessionStart(input: Record<string, unknown>): Promise<void>
   if (sessionId) initArgs.push(`--session=${sessionId}`)
   await captureConsoleLog(() => init(initArgs))
 
-  // Now build prime context
-  const contextParts: string[] = []
-
-  // Session state context
-  const session = await getSessionState(sessionId)
-  if (session) {
-    const { state } = session
-    if (state.currentMode && state.currentMode !== 'default') {
-      contextParts.push(`Active mode: ${state.currentMode}`)
-      if (state.currentPhase) {
-        contextParts.push(`Current phase: ${state.currentPhase}`)
-      }
-      if (state.issueNumber) {
-        contextParts.push(`Linked issue: #${state.issueNumber}`)
-      }
-    }
-  }
-
-  // Mode selection help (always include available modes summary)
-  try {
-    const config = await loadModesConfig()
-    const modeList = Object.entries(config.modes)
-      .filter(([_, m]) => !m.deprecated)
-      .map(([id, m]) => `${id}: ${m.description}`)
-      .join('\n')
-    contextParts.push(`\nAvailable modes:\n${modeList}`)
-  } catch {
-    // Config not available, skip
-  }
-
-  // Prime extensions from wm.yaml
-  try {
-    const wmConfig = loadWmConfig()
-    if (wmConfig.prime_extensions?.length) {
-      contextParts.push('\n--- Project Extensions ---')
-      for (const ext of wmConfig.prime_extensions) {
-        contextParts.push(ext)
-      }
-    }
-  } catch {
-    // Config not available, skip
-  }
+  // Delegate to prime for the full kata hints context
+  const { prime } = await import('./prime.js')
+  const primeArgs: string[] = []
+  if (sessionId) primeArgs.push(`--session=${sessionId}`)
+  const additionalContext = await captureConsoleLog(() => prime(primeArgs))
 
   outputJson({
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext: contextParts.join('\n'),
+      additionalContext,
     },
   })
 }
@@ -214,52 +180,91 @@ async function handleUserPrompt(input: Record<string, unknown>): Promise<void> {
 }
 
 // ── Handler: mode-gate ──
-// Checks mode state for PreToolUse gating
+// Checks mode state for PreToolUse gating, and injects KATA_SESSION_ID
+// into kata bash commands so they can resolve the session ID.
 async function handleModeGate(input: Record<string, unknown>): Promise<void> {
-  const session = await getSessionState(input.session_id as string | undefined)
+  const sessionId = input.session_id as string | undefined
+  const toolName = (input.tool_name as string) ?? ''
+  const toolInput = (input.tool_input as Record<string, unknown>) ?? {}
 
-  if (!session) {
-    // No session state — allow (don't block new projects)
-    outputJson({ decision: 'allow' })
-    return
+  const session = await getSessionState(sessionId)
+
+  if (session) {
+    const { state } = session
+
+    // If in default mode (no mode entered), block write operations.
+    // These are Claude Code's internal tool_name values for file-mutation operations.
+    if (state.currentMode === 'default' || !state.currentMode) {
+      const writeTools = ['Edit', 'MultiEdit', 'Write', 'NotebookEdit']
+      if (writeTools.includes(toolName)) {
+        outputJson({
+          hookSpecificOutput: {
+            hookEventName: 'PreToolUse',
+            permissionDecision: 'deny',
+            permissionDecisionReason:
+              'Enter a mode first: wm enter <mode>. Write operations are blocked until a mode is active.',
+          },
+        })
+        return
+      }
+    }
   }
 
-  const { state } = session
-  const toolName = (input.tool_name as string) ?? ''
-
-  // If in default mode (no mode entered), block write operations.
-  // These are Claude Code's internal tool_name values for file-mutation operations.
-  if (state.currentMode === 'default' || !state.currentMode) {
-    const writeTools = ['Edit', 'MultiEdit', 'Write', 'NotebookEdit']
-    if (writeTools.includes(toolName)) {
+  // Inject --session=<id> into kata bash commands so they can resolve the session.
+  // Uses updatedInput to append --session=<id> to the kata subcommand call.
+  if (toolName === 'Bash' && sessionId) {
+    const command = (toolInput.command as string) ?? ''
+    // Match `kata` as a top-level command: at start, or after ;/&&/||/|
+    // Avoids false-positives on kata appearing inside string literals
+    const kataAsCommand = /(?:^|[;&|]\s*)((?:\.\/|(?:\/\S+\/)*)kata)\s/.exec(command)
+    if (kataAsCommand && !command.includes('--session=') && !/\bkata\s+hook\b/.test(command)) {
+      // Append --session=<id> after the first kata subcommand invocation
+      const injected = command.replace(
+        /(\bkata\s+\S+)/,
+        `$1 --session=${sessionId}`,
+      )
       outputJson({
-        decision: 'block',
-        reason: 'Enter a mode first: wm enter <mode>. Write operations are blocked until a mode is active.',
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'allow',
+          updatedInput: {
+            ...toolInput,
+            command: injected,
+          },
+        },
       })
       return
     }
   }
 
-  outputJson({ decision: 'allow' })
+  // Default: allow (no JSON output needed, but be explicit)
+  outputJson({
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+    },
+  })
 }
 
 // ── Handler: task-deps ──
 // Checks task dependencies before allowing TaskUpdate to mark a task completed.
 // Blocks completion if any blockedBy tasks are not yet completed.
 async function handleTaskDeps(input: Record<string, unknown>): Promise<void> {
-  const taskId = (input.task_id as string) ?? ''
-  const newStatus = (input.status as string) ?? ''
+  // Task fields arrive inside tool_input for PreToolUse hooks
+  const toolInput = (input.tool_input as Record<string, unknown>) ?? {}
+  const taskId = (toolInput.taskId as string) ?? ''
+  const newStatus = (toolInput.status as string) ?? ''
 
   // Only enforce deps when completing a task
   if (!taskId || newStatus !== 'completed') {
-    outputJson({ decision: 'allow' })
+    outputJson({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } })
     return
   }
 
   try {
     const session = await getSessionState(input.session_id as string | undefined)
     if (!session) {
-      outputJson({ decision: 'allow' })
+      outputJson({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } })
       return
     }
 
@@ -267,7 +272,7 @@ async function handleTaskDeps(input: Record<string, unknown>): Promise<void> {
     const task = tasks.find((t) => t.id === taskId)
 
     if (!task || !task.blockedBy?.length) {
-      outputJson({ decision: 'allow' })
+      outputJson({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } })
       return
     }
 
@@ -285,8 +290,11 @@ async function handleTaskDeps(input: Record<string, unknown>): Promise<void> {
         })
         .join(', ')
       outputJson({
-        decision: 'block',
-        reason: `Task [${taskId}] is blocked by incomplete task(s): ${depTasks}`,
+        hookSpecificOutput: {
+          hookEventName: 'PreToolUse',
+          permissionDecision: 'deny',
+          permissionDecisionReason: `Task [${taskId}] is blocked by incomplete task(s): ${depTasks}`,
+        },
       })
       return
     }
@@ -294,7 +302,7 @@ async function handleTaskDeps(input: Record<string, unknown>): Promise<void> {
     // On any error, allow — don't block on infra failures
   }
 
-  outputJson({ decision: 'allow' })
+  outputJson({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow' } })
 }
 
 // ── Handler: task-evidence ──
@@ -332,8 +340,11 @@ async function handleTaskEvidence(_input: Record<string, unknown>): Promise<void
   }
 
   outputJson({
-    decision: 'allow',
-    ...(additionalContext ? { reason: additionalContext } : {}),
+    hookSpecificOutput: {
+      hookEventName: 'PreToolUse',
+      permissionDecision: 'allow',
+      ...(additionalContext ? { additionalContext } : {}),
+    },
   })
 }
 
