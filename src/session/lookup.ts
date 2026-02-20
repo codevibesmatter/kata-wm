@@ -1,6 +1,4 @@
 // Session ID lookup utilities
-// Port of lib-session.sh logic to TypeScript
-import * as fs from 'node:fs/promises'
 import * as path from 'node:path'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -63,65 +61,21 @@ export function findClaudeProjectDir(): string {
 }
 
 /**
- * Get most recent session ID from registry.jsonl
- * @param registryPath - Absolute path to registry.jsonl
- * @returns Session ID or null if not found
- */
-async function getLastSessionFromRegistry(registryPath: string): Promise<string | null> {
-  try {
-    const content = await fs.readFile(registryPath, 'utf-8')
-    const lines = content
-      .trim()
-      .split('\n')
-      .filter((line) => line.length > 0)
-
-    // Walk backwards to find most recent session_started event
-    for (let i = lines.length - 1; i >= 0; i--) {
-      try {
-        const entry = JSON.parse(lines[i])
-        if (entry.event === 'session_started' && entry.sessionId) {
-          return entry.sessionId
-        }
-      } catch {
-        // Skip malformed lines (continue is implicit)
-      }
-    }
-
-    return null
-  } catch {
-    // Registry not found or not readable
-    return null
-  }
-}
-
-/**
- * Get current Claude Code session ID
- * Methods (in priority order):
- * 1. CLAUDE_SESSION_ID env var
- * 2. Registry (most recent session_started event)
+ * Get current Claude Code session ID from CLAUDE_SESSION_ID env var.
+ * This is the ONLY source — never read from files or registry.
+ * Claude Code sets this env var automatically in all hook and Bash tool contexts.
  *
  * @returns Session ID string
- * @throws Error if no active session found
+ * @throws Error if CLAUDE_SESSION_ID is not set
  */
 export async function getCurrentSessionId(): Promise<string> {
-  // Method 1: CLAUDE_SESSION_ID env var (highest priority, for SDK agents)
   const envSessionId = process.env.CLAUDE_SESSION_ID?.replace(/\n/g, '')
   if (envSessionId && UUID_REGEX.test(envSessionId)) {
     return envSessionId
   }
 
-  // Method 2: Registry - most recent session_started
-  const claudeDir = findClaudeProjectDir()
-  const registryPath = path.join(claudeDir, '.claude/sessions/registry.jsonl')
-
-  const lastSession = await getLastSessionFromRegistry(registryPath)
-  if (lastSession && UUID_REGEX.test(lastSession)) {
-    return lastSession
-  }
-
   throw new Error(
-    'No active session found. Set CLAUDE_SESSION_ID or ensure registry exists with session_started event.\n' +
-      'Run: wm doctor --fix',
+    'CLAUDE_SESSION_ID env var not set. kata commands must be run inside a Claude Code session.',
   )
 }
 

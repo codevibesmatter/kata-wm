@@ -7,6 +7,8 @@ phases:
   - id: p0
     name: "Bootstrap"
     description: "Create .claude/ directory and verify prerequisites"
+    task_config:
+      title: "P0: Bootstrap — verify Node.js and create .claude/"
     tasks:
       - "Verify Node.js >= 18 is installed"
       - "Create .claude/ directory if it does not exist"
@@ -14,6 +16,9 @@ phases:
   - id: p1
     name: "Setup Style"
     description: "Ask batteries-included vs custom — first question, determines the rest"
+    task_config:
+      title: "P1: Setup Style — quick (batteries) or custom interview?"
+      depends_on: [p0]
     tasks:
       - "AskUserQuestion: Quick setup (batteries-included, all defaults) or custom interview?"
       - "If quick: confirm project name from package.json, then skip to p4"
@@ -21,6 +26,9 @@ phases:
   - id: p2
     name: "Project Discovery"
     description: "Auto-detect project settings and ask for confirmation (custom path only)"
+    task_config:
+      title: "P2: Project Discovery — confirm name, test command, CI"
+      depends_on: [p1]
     tasks:
       - "AskUserQuestion: Detect project name from package.json — is '{detected_name}' correct?"
       - "AskUserQuestion: Detected test command '{test_command}' — accept or override?"
@@ -28,6 +36,9 @@ phases:
   - id: p3
     name: "Custom Configuration"
     description: "Review settings, mode paths, and strict hooks (custom path only)"
+    task_config:
+      title: "P3: Custom Configuration — review, paths, strict hooks"
+      depends_on: [p2]
     tasks:
       - "AskUserQuestion: Enable spec review before implementation? (default: no)"
       - "AskUserQuestion: Enable code review? If yes, which reviewer? (codex/gemini/none)"
@@ -39,6 +50,9 @@ phases:
   - id: p4
     name: "GitHub Setup"
     description: "Verify gh CLI is installed and authenticated"
+    task_config:
+      title: "P4: GitHub Setup — gh CLI, auth, labels"
+      depends_on: [p1]
     tasks:
       - "Check gh CLI is installed (gh --version), guide install if missing"
       - "Check gh auth status, run gh auth login if not authenticated"
@@ -47,6 +61,9 @@ phases:
   - id: p5
     name: "Write Configuration"
     description: "Write wm.yaml, register hooks, and scaffold batteries if chosen"
+    task_config:
+      title: "P5: Write Configuration — wm.yaml, hooks, batteries"
+      depends_on: [p4]
     tasks:
       - "Write .claude/workflows/wm.yaml with collected answers"
       - "Register hooks in .claude/settings.json"
@@ -55,6 +72,9 @@ phases:
   - id: p6
     name: "Verify Setup"
     description: "Run kata doctor to verify everything is configured correctly"
+    task_config:
+      title: "P6: Verify Setup — kata doctor"
+      depends_on: [p5]
     tasks:
       - "Run kata doctor --json and display results"
       - "Show summary of installed configuration"
