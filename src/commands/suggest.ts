@@ -444,7 +444,7 @@ export async function suggest(args: string[]): Promise<void> {
 
 **⚠️ Enter a mode before proceeding:**
 
-\`kata enter<mode>\`
+\`kata enter <mode>\`
 
 ## Available Modes
 ${modeList}
