@@ -50,11 +50,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/codevibesmatter/kata.git"
+    "url": "https://github.com/codevibesmatter/kata-wm.git"
   },
-  "homepage": "https://github.com/codevibesmatter/kata#readme",
+  "homepage": "https://github.com/codevibesmatter/kata-wm#readme",
   "bugs": {
-    "url": "https://github.com/codevibesmatter/kata/issues"
+    "url": "https://github.com/codevibesmatter/kata-wm/issues"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",
