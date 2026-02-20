@@ -34,7 +34,11 @@ export async function batteries(args: string[]): Promise<void> {
   }
 
   const result = scaffoldBatteries(projectRoot)
-  const total = result.templates.length + result.agents.length + result.specTemplates.length
+  const total =
+    result.templates.length +
+    result.agents.length +
+    result.specTemplates.length +
+    result.githubTemplates.length
 
   if (total === 0 && result.skipped.length > 0) {
     process.stdout.write('wm batteries: all files already present (nothing to copy)\n')
@@ -46,23 +50,20 @@ export async function batteries(args: string[]): Promise<void> {
 
   if (result.templates.length > 0) {
     process.stdout.write(`\nMode templates → .claude/workflows/templates/\n`)
-    for (const f of result.templates) {
-      process.stdout.write(`  ${f}\n`)
-    }
+    for (const f of result.templates) process.stdout.write(`  ${f}\n`)
   }
-
   if (result.agents.length > 0) {
     process.stdout.write(`\nAgents → .claude/agents/\n`)
-    for (const f of result.agents) {
-      process.stdout.write(`  ${f}\n`)
-    }
+    for (const f of result.agents) process.stdout.write(`  ${f}\n`)
   }
-
   if (result.specTemplates.length > 0) {
     process.stdout.write(`\nSpec templates → planning/spec-templates/\n`)
-    for (const f of result.specTemplates) {
-      process.stdout.write(`  ${f}\n`)
-    }
+    for (const f of result.specTemplates) process.stdout.write(`  ${f}\n`)
+  }
+  if (result.githubTemplates.length > 0) {
+    process.stdout.write(`\nGitHub → .github/\n`)
+    for (const f of result.githubTemplates) process.stdout.write(`  ${f}\n`)
+    process.stdout.write(`\nNext: run 'wm enter setup' to create labels on GitHub\n`)
   }
 
   if (result.skipped.length > 0) {

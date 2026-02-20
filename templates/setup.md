@@ -34,6 +34,15 @@ phases:
       - "AskUserQuestion: Session retention days? (default: 7)"
       - "AskUserQuestion: Install strict mode hooks (PreToolUse gates)? (default: no)"
       - "AskUserQuestion: Install batteries-included starter content? (templates, agents, spec templates)"
+  - id: github-setup
+    name: "GitHub Setup"
+    description: "Install gh CLI, authenticate, create labels and issue templates"
+    tasks:
+      - "Check gh CLI is installed (gh --version), guide install if missing"
+      - "Check gh auth status, run gh auth login if not authenticated"
+      - "AskUserQuestion: Set up GitHub labels and issue templates on this repo?"
+      - "If yes: read .github/wm-labels.json and create each label via gh label create --force"
+      - "Confirm .github/ISSUE_TEMPLATE/ files are in place (from batteries scaffold)"
   - id: write-config
     name: "Write Configuration"
     description: "Write wm.yaml, register hooks, and scaffold batteries if chosen"
@@ -57,14 +66,15 @@ This mode walks through configuring `wm` for your project.
 
 ## How It Works
 
-The setup interview has 6 phases:
+The setup interview has 7 phases:
 
 1. **Bootstrap** — Verify prerequisites and create `.claude/` directory
 2. **Project Discovery** — Auto-detect project settings (name, test command, CI)
 3. **Review Configuration** — Configure code review and verification settings
 4. **Mode Configuration** — Set paths, behavior preferences, and batteries option
-5. **Write Configuration** — Write `wm.yaml`, register hooks, scaffold if chosen
-6. **Verify** — Run `wm doctor` to confirm everything works
+5. **GitHub Setup** — Install `gh` CLI, authenticate, create labels and issue templates
+6. **Write Configuration** — Write `wm.yaml`, register hooks, scaffold if chosen
+7. **Verify** — Run `wm doctor` to confirm everything works
 
 ## Quick Setup
 
@@ -114,6 +124,68 @@ When asked "Install batteries-included starter content?", choosing Yes scaffolds
 - `feature.md` — Feature spec with behaviors, phases, acceptance criteria
 - `epic.md` — Epic/initiative with features, milestones, success metrics
 - `bug.md` — Bug report with reproduction steps and fix tracking
+
+## GitHub Setup Phase
+
+The `github-setup` phase walks through:
+
+### 1. Check `gh` CLI
+
+```bash
+gh --version 2>/dev/null || echo "NOT_INSTALLED"
+```
+
+If not installed, guide the user:
+- macOS: `brew install gh`
+- Linux: `sudo apt install gh` or https://cli.github.com
+- Windows: `winget install GitHub.cli`
+
+### 2. Check Authentication
+
+```bash
+gh auth status 2>/dev/null
+```
+
+If not authenticated:
+```bash
+gh auth login
+```
+Follow the prompts — choose GitHub.com, HTTPS, browser authentication.
+
+### 3. Create Labels
+
+Ask:
+```
+AskUserQuestion(questions=[{
+  question: "Set up GitHub labels on this repo?",
+  header: "Labels",
+  options: [
+    {label: "Yes — create all labels", description: "17 labels: type, priority, status, review"},
+    {label: "No — skip", description: "Create labels manually later"}
+  ]
+}])
+```
+
+If yes, read `.github/wm-labels.json` and create each label:
+```bash
+# For each label in wm-labels.json:
+gh label create "{name}" --color "{color}" --description "{description}" --force
+```
+
+The `--force` flag updates existing labels, so this is safe to re-run.
+
+### 4. Issue Templates
+
+Confirm `.github/ISSUE_TEMPLATE/` exists with the 3 templates:
+```bash
+ls .github/ISSUE_TEMPLATE/
+# feature.yml  bug.yml  epic.yml
+```
+
+If missing (batteries not yet run):
+```bash
+wm batteries
+```
 
 ## The Batteries Question (mode-config phase)
 

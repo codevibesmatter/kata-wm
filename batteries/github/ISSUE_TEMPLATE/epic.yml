@@ -1,0 +1,65 @@
+name: Epic
+description: Large initiative spanning multiple features
+title: "[Epic]: "
+labels: ["epic", "status:todo"]
+body:
+  - type: textarea
+    id: vision
+    attributes:
+      label: Vision
+      description: What outcome are we trying to achieve? For whom? Why now?
+      placeholder: "By shipping X, we enable Y to do Z, resulting in..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What is broken or missing today? What pain does this cause?
+    validations:
+      required: true
+
+  - type: textarea
+    id: features
+    attributes:
+      label: Features in Scope
+      description: List the features that make up this epic (link issues when created)
+      placeholder: |
+        - [ ] Feature A (#)
+        - [ ] Feature B (#)
+        - [ ] Feature C (#)
+    validations:
+      required: false
+
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Success Metrics
+      description: How will we know the epic is successful?
+      placeholder: |
+        - Metric 1: from X to Y
+        - Metric 2: target Z
+    validations:
+      required: false
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-Goals
+      description: What is explicitly out of scope for this epic?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "P0 — Critical"
+        - "P1 — High"
+        - "P2 — Medium"
+        - "P3 — Low"
+      default: 2
+    validations:
+      required: true
