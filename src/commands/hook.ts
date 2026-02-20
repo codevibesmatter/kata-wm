@@ -2,7 +2,7 @@
 // Core of hooks-as-commands architecture: each hook event has a handler function
 // that reads stdin JSON, performs the check, and outputs Claude Code hook JSON.
 import { execSync } from 'node:child_process'
-import { getCurrentSessionId, getStateFilePath, findClaudeProjectDir } from '../session/lookup.js'
+import { getStateFilePath, findClaudeProjectDir } from '../session/lookup.js'
 import { readState, stateExists } from '../state/reader.js'
 import { loadModesConfig } from '../config/cache.js'
 import { loadWmConfig } from '../config/wm-config.js'
@@ -75,17 +75,18 @@ async function readStdinJson(): Promise<Record<string, unknown>> {
 }
 
 /**
- * Safely get session state, returning null if not available
+ * Safely get session state from a session ID extracted from hook stdin JSON.
+ * Returns null if sessionId is missing or state doesn't exist.
  */
 async function getSessionState(
-  sessionId?: string,
+  sessionId: string | undefined,
 ): Promise<{ state: SessionState; sessionId: string } | null> {
+  if (!sessionId) return null
   try {
-    const sid = sessionId ?? (await getCurrentSessionId())
-    const stateFile = await getStateFilePath(sid)
+    const stateFile = await getStateFilePath(sessionId)
     if (await stateExists(stateFile)) {
       const state = await readState(stateFile)
-      return { state, sessionId: sid }
+      return { state, sessionId }
     }
     return null
   } catch {
@@ -122,7 +123,7 @@ async function captureConsoleLog(fn: () => Promise<void>): Promise<string> {
 // ── Handler: session-start ──
 // Calls init then prime — initializes session state and outputs context
 async function handleSessionStart(input: Record<string, unknown>): Promise<void> {
-  const sessionId = (input.session_id as string) ?? process.env.CLAUDE_SESSION_ID
+  const sessionId = input.session_id as string | undefined
   const source = (input.source as string) ?? 'startup'
 
   // Import and run init (silently capture its output)
@@ -225,7 +226,7 @@ async function handleUserPrompt(input: Record<string, unknown>): Promise<void> {
 // ── Handler: mode-gate ──
 // Checks mode state for PreToolUse gating
 async function handleModeGate(input: Record<string, unknown>): Promise<void> {
-  const session = await getSessionState()
+  const session = await getSessionState(input.session_id as string | undefined)
 
   if (!session) {
     // No session state — allow (don't block new projects)
@@ -266,7 +267,7 @@ async function handleTaskDeps(input: Record<string, unknown>): Promise<void> {
   }
 
   try {
-    const session = await getSessionState()
+    const session = await getSessionState(input.session_id as string | undefined)
     if (!session) {
       outputJson({ decision: 'allow' })
       return
@@ -348,8 +349,8 @@ async function handleTaskEvidence(_input: Record<string, unknown>): Promise<void
 
 // ── Handler: stop-conditions ──
 // Calls canExit to check if session can be stopped
-async function handleStopConditions(_input: Record<string, unknown>): Promise<void> {
-  const session = await getSessionState()
+async function handleStopConditions(input: Record<string, unknown>): Promise<void> {
+  const session = await getSessionState(input.session_id as string | undefined)
 
   if (!session) {
     // No session — allow stop (no output = allow)

@@ -3,9 +3,6 @@ import * as path from 'node:path'
 import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
-// UUID v4 regex pattern
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 /**
  * Get the workflow-management package root directory
  * Uses import.meta.url to find the package location
@@ -61,21 +58,20 @@ export function findClaudeProjectDir(): string {
 }
 
 /**
- * Get current Claude Code session ID from CLAUDE_SESSION_ID env var.
- * This is the ONLY source — never read from files or registry.
- * Claude Code sets this env var automatically in all hook and Bash tool contexts.
+ * Get current Claude Code session ID.
  *
- * @returns Session ID string
- * @throws Error if CLAUDE_SESSION_ID is not set
+ * Session ID comes from hook stdin JSON (input.session_id) — hooks must
+ * extract it there and pass it explicitly via --session=ID to subcommands.
+ *
+ * This function is a last-resort fallback for callers that don't receive
+ * session_id from hook input. It always throws — callers must pass --session.
+ *
+ * @throws Error always — use --session=ID flag instead
  */
 export async function getCurrentSessionId(): Promise<string> {
-  const envSessionId = process.env.CLAUDE_SESSION_ID?.replace(/\n/g, '')
-  if (envSessionId && UUID_REGEX.test(envSessionId)) {
-    return envSessionId
-  }
-
   throw new Error(
-    'CLAUDE_SESSION_ID env var not set. kata commands must be run inside a Claude Code session.',
+    'Session ID not available. Pass --session=SESSION_ID explicitly.\n' +
+      'Hook handlers receive session_id from stdin JSON and must forward it.',
   )
 }
 
