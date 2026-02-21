@@ -217,12 +217,18 @@ export async function runScenario(
   }
 
   try {
-    // Unset CLAUDECODE so the spawned SDK process isn't blocked by the
-    // "cannot launch inside another Claude Code session" guard.
-    // Set CLAUDE_PROJECT_DIR to the inner project so kata commands resolve
-    // to the correct project even if the agent tries to cd elsewhere.
-    const { CLAUDECODE: _cc, CLAUDE_PROJECT_DIR: _cpd, ...baseEnv } = process.env
-    baseEnv.CLAUDE_PROJECT_DIR = projectDir
+    // Build clean env like cc-gateway: strip CLAUDECODE*, CLAUDE_CODE_ENTRYPOINT
+    // so the spawned SDK process isn't blocked by nested-session guards.
+    // Set CLAUDE_PROJECT_DIR to the inner project so kata commands resolve correctly.
+    const cleanEnv: Record<string, string> = {}
+    for (const [key, value] of Object.entries(process.env)) {
+      if (value === undefined) continue
+      if (key.startsWith('CLAUDECODE')) continue
+      if (key === 'CLAUDE_CODE_ENTRYPOINT') continue
+      if (key === 'CLAUDE_PROJECT_DIR') continue
+      cleanEnv[key] = value
+    }
+    cleanEnv.CLAUDE_PROJECT_DIR = projectDir
 
     const isResume = !!options.resumeSessionId
 
@@ -230,11 +236,12 @@ export async function runScenario(
       cwd: projectDir,
       allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Task', 'AskUserQuestion'],
       permissionMode: 'bypassPermissions',
+      allowDangerouslySkipPermissions: true,
       settingSources: ['project'],
       hooks: {
         PreToolUse: [{ matcher: 'AskUserQuestion', hooks: [interceptQuestion] }],
       },
-      env: baseEnv,
+      env: cleanEnv,
     }
 
     if (isResume) {
@@ -296,19 +303,19 @@ export async function runScenario(
       if (options.verbose) {
         process.stdout.write(`[paused] Session paused for AskUserQuestion. session_id=${sessionId}\n`)
       }
-    } else {
-      // Session completed — run checkpoints
-      const ctx: EvalContext = buildContext(projectDir)
-      for (const checkpoint of scenario.checkpoints) {
-        const error = await checkpoint.assert(ctx)
-        result.assertions.push({
-          name: checkpoint.name,
-          passed: error === null,
-          error: error ?? undefined,
-        })
-      }
-      result.passed = result.assertions.every((a) => a.passed)
     }
+
+    // Always run checkpoints — even when paused, state may already be written
+    const ctx: EvalContext = buildContext(projectDir)
+    for (const checkpoint of scenario.checkpoints) {
+      const error = await checkpoint.assert(ctx)
+      result.assertions.push({
+        name: checkpoint.name,
+        passed: error === null,
+        error: error ?? undefined,
+      })
+    }
+    result.passed = result.assertions.every((a) => a.passed)
   } finally {
     result.durationMs = Date.now() - startMs
     // No cleanup — projects persist for inspection and iteration

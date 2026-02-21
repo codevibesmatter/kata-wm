@@ -22,13 +22,14 @@ import { taskModeScenario } from './scenarios/task-mode.js'
 import { planningModeScenario } from './scenarios/planning-mode.js'
 import { onboardScenario } from './scenarios/onboard.js'
 import { researchModeScenario } from './scenarios/research-mode.js'
+import { modeEntryScenario } from './scenarios/mode-entry.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TRANSCRIPT_DIR = resolve(__dirname, '../eval-transcripts')
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-const scenarios = [onboardScenario, taskModeScenario, planningModeScenario, researchModeScenario]
+const scenarios = [modeEntryScenario, onboardScenario, taskModeScenario, planningModeScenario, researchModeScenario]
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
