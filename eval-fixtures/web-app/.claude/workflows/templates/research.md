@@ -15,7 +15,10 @@ phases:
       - id: clarify-intent
         title: "Clarify research intent"
         instruction: |
-          Use AskUserQuestion IMMEDIATELY after mode activation:
+          Use AskUserQuestion IMMEDIATELY after mode activation to understand:
+          - What topic/area they want to explore
+          - Why they need this research (context)
+          - What they'll do with the findings
 
           AskUserQuestion(questions=[
             {
@@ -61,12 +64,27 @@ phases:
           1. Primary question: {what must be answered}
           2. Secondary questions: {nice to have}
           3. Success criteria: {what does a complete answer look like}
-          4. Out of scope: {what to skip even if interesting}
 
           Also: check GitHub issues for related context:
           ```bash
           gh issue list --search "{topic}" --limit 5
           ```
+
+          Then: Mark this task completed via TodoWrite
+
+      - id: set-boundaries
+        title: "Set research boundaries"
+        instruction: |
+          Define explicit boundaries to prevent scope creep:
+
+          **IN scope:**
+          - {what to explore}
+
+          **OUT of scope:**
+          - {what to skip even if interesting}
+
+          **Time limit:** Set a rough budget (e.g. "30 min codebase, 15 min external").
+          Research expands indefinitely without boundaries.
 
           Then: Mark this task completed via TodoWrite
 
@@ -173,8 +191,9 @@ phases:
       - id: create-research-doc
         title: "Write research findings document"
         instruction: |
+          Read `research_path` from `.claude/workflows/wm.yaml` (default: `planning/research`).
           Create persistent findings doc at:
-          `planning/research/{YYYY-MM-DD}-{slug}.md`
+          `{research_path}/{YYYY-MM-DD}-{slug}.md`
 
           Structure:
           ```markdown
@@ -212,7 +231,7 @@ phases:
 
           Then commit:
           ```bash
-          git add planning/research/
+          git add {research_path}/
           git commit -m "docs(research): {topic}"
           git push
           ```
@@ -271,7 +290,7 @@ P5: Present (required)     → share results + decide next step
 
 ## Output
 
-- Research doc: `planning/research/{date}-{slug}.md`
+- Research doc: `{research_path}/{date}-{slug}.md` (configurable in wm.yaml)
 - Structured findings with sources
 - Ranked recommendations
 - Next steps (none, planning, more research)
