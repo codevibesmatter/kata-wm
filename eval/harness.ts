@@ -163,6 +163,13 @@ export async function runScenario(
       'git add -A && git commit -m "Initial scaffold"',
       { cwd: projectDir, stdio: ['pipe', 'pipe', 'pipe'] },
     )
+    // Set up a local bare remote so `git push` works for templates with changes_pushed
+    const bareRemote = join(projectDir, '..', `${scenario.id}-remote.git`)
+    execSync(`git init --bare "${bareRemote}"`, { stdio: ['pipe', 'pipe', 'pipe'] })
+    execSync(`git remote add origin "${bareRemote}" && git push -u origin main`, {
+      cwd: projectDir,
+      stdio: ['pipe', 'pipe', 'pipe'],
+    })
   }
 
   const result: EvalResult = {
