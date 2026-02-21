@@ -33,10 +33,7 @@ if (listMode) {
   process.exit(0)
 }
 
-if (!process.env.ANTHROPIC_API_KEY) {
-  process.stderr.write('Error: ANTHROPIC_API_KEY environment variable is required\n')
-  process.exit(1)
-}
+// Agent SDK uses Claude Code's existing auth — no ANTHROPIC_API_KEY needed.
 
 const toRun = scenarioArg
   ? scenarios.filter((s) => s.id === scenarioArg)
