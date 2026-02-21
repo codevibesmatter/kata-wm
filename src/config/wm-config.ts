@@ -7,7 +7,12 @@ export interface WmConfig {
   // Project profile
   project?: {
     name?: string
-    test_command?: string
+    build_command?: string | null      // compile/build step (null = skip)
+    typecheck_command?: string | null  // type check step (null = skip)
+    test_command?: string              // run tests
+    smoke_command?: string | null      // runtime smoke test (null = skip)
+    diff_base?: string                 // git diff baseline branch (default: 'origin/main')
+    test_file_pattern?: string         // glob for test files (default: '*.test.ts,*.spec.ts')
     ci?: string | null
   }
   // Path configuration

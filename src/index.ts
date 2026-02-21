@@ -26,6 +26,7 @@ import { teardown } from './commands/teardown.js'
 import { hook } from './commands/hook.js'
 import { batteries } from './commands/batteries.js'
 import { modes } from './commands/modes.js'
+import { verifyPhase } from './commands/verify-phase.js'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getPackageRoot } from './session/lookup.js'
@@ -140,6 +141,10 @@ async function main() {
         await modes(commandArgs)
         break
 
+      case 'verify-phase':
+        await verifyPhase(commandArgs)
+        break
+
       case 'hook':
         await hook(commandArgs)
         break
@@ -188,6 +193,7 @@ Usage:
   kata prompt [--session=SESSION_ID]             Output current mode prompt
   kata init [--session=SESSION_ID] [--force]     Initialize session state
   kata prime [--session=ID] [--hook-json]        Output context injection block
+  kata verify-phase <phase-id> [--issue=N] [--force]  Run per-phase verification
   kata validate-spec --issue=N | path.md         Validate spec phases format
   kata validate-template <path> [--json]         Validate a template file
   kata init-template <path> [options]            Create a new template file

@@ -146,6 +146,27 @@ ${failedVerifyCmd}
       }
     }
 
+    case 'verification_stale': {
+      const staleCfg = loadWmConfig()
+      const staleReviewer = staleCfg.reviews?.code_reviewer
+      const staleVerifyCmd =
+        staleCfg.verify_command != null
+          ? staleCfg.verify_command
+          : (staleCfg.project?.test_command ?? staleReviewer ?? 'your verify command')
+      return {
+        type: 'verification_stale',
+        title: `BLOCKED: Verification evidence is stale for issue #${issueNum}`,
+        message: `The verification evidence predates the latest commit. Re-run verification to generate fresh evidence.
+
+\`\`\`bash
+${staleVerifyCmd}
+\`\`\`
+
+Evidence file: .claude/verification-evidence/${issueNum}.json`,
+        fixCommand: `cat .claude/verification-evidence/${issueNum}.json | jq '.verifiedAt'`,
+      }
+    }
+
     default:
       return undefined
   }

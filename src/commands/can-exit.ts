@@ -1,6 +1,6 @@
 // wm can-exit - Check if exit conditions are met (native task-based)
 import { execSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getCurrentSessionId, findClaudeProjectDir, getStateFilePath } from '../session/lookup.js'
 import { readState } from '../state/reader.js'
@@ -84,13 +84,31 @@ function checkGlobalConditions(): { passed: boolean; reasons: string[] } {
 }
 
 /**
+ * Get the latest git commit timestamp (ISO 8601)
+ * Returns null if not in a git repo or no commits
+ */
+function getLatestCommitTimestamp(): Date | null {
+  try {
+    const ts = execSync('git log -1 --format=%cI 2>/dev/null || true', {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim()
+    if (!ts) return null
+    const d = new Date(ts)
+    return isNaN(d.getTime()) ? null : d
+  } catch {
+    return null
+  }
+}
+
+/**
  * Check verification evidence for implementation mode
  * Supports any reviewer (codex, gemini) or custom verify_command output.
  * Returns artifact type for guidance lookup instead of hardcoded message.
  */
 function checkVerificationEvidence(issueNumber: number | undefined): {
   passed: boolean
-  artifactType?: 'verification_not_run' | 'verification_failed'
+  artifactType?: 'verification_not_run' | 'verification_failed' | 'verification_stale'
 } {
   if (!issueNumber) return { passed: true } // Skip if no issue linked
 
@@ -110,30 +128,140 @@ function checkVerificationEvidence(issueNumber: number | undefined): {
     const evidence = readFileSync(evidenceFile, 'utf-8').trim()
     const parsed = JSON.parse(evidence)
 
-    // Check if verification passed
-    if (parsed.passed === true) {
-      return { passed: true }
-    }
-
     // Check if verification was run at all
     if (!parsed.verifiedAt) {
-      return {
-        passed: false,
-        artifactType: 'verification_not_run',
+      return { passed: false, artifactType: 'verification_not_run' }
+    }
+
+    // Check if verification passed
+    if (parsed.passed !== true) {
+      return { passed: false, artifactType: 'verification_failed' }
+    }
+
+    // Timestamp check: evidence must be newer than the latest commit
+    const latestCommit = getLatestCommitTimestamp()
+    if (latestCommit) {
+      const evidenceDate = new Date(parsed.verifiedAt as string)
+      if (!isNaN(evidenceDate.getTime()) && evidenceDate < latestCommit) {
+        return { passed: false, artifactType: 'verification_stale' }
       }
     }
 
-    // Verification was run but failed
-    return {
-      passed: false,
-      artifactType: 'verification_failed',
-    }
+    return { passed: true }
   } catch {
     // No evidence file - verification not run
     return {
       passed: false,
       artifactType: 'verification_not_run',
     }
+  }
+}
+
+/**
+ * Check that at least one phase evidence file exists with fresh timestamp and overallPassed.
+ * Reads .claude/verification-evidence/phase-*-{issueNumber}.json files.
+ */
+function checkTestsPass(issueNumber: number): { passed: boolean; reason?: string } {
+  try {
+    const projectRoot = findClaudeProjectDir()
+    const evidenceDir = join(projectRoot, '.claude', 'verification-evidence')
+    if (!existsSync(evidenceDir)) {
+      return {
+        passed: false,
+        reason: `verify-phase has not been run. Run: kata verify-phase <phaseId> --issue=${issueNumber}`,
+      }
+    }
+
+    const phaseFiles = readdirSync(evidenceDir)
+      .filter((f) => f.startsWith('phase-') && f.endsWith(`-${issueNumber}.json`))
+      .map((f) => join(evidenceDir, f))
+
+    if (phaseFiles.length === 0) {
+      return {
+        passed: false,
+        reason: `verify-phase has not been run. Run: kata verify-phase <phaseId> --issue=${issueNumber}`,
+      }
+    }
+
+    const latestCommit = getLatestCommitTimestamp()
+
+    for (const file of phaseFiles) {
+      try {
+        const content = JSON.parse(readFileSync(file, 'utf-8'))
+        const phaseId = content.phaseId ?? file
+
+        if (content.overallPassed !== true) {
+          return {
+            passed: false,
+            reason: `Phase ${phaseId} failed verify-phase. Re-run: kata verify-phase ${phaseId} --issue=${issueNumber}`,
+          }
+        }
+
+        if (latestCommit && content.timestamp) {
+          const evidenceDate = new Date(content.timestamp as string)
+          if (!isNaN(evidenceDate.getTime()) && evidenceDate < latestCommit) {
+            return {
+              passed: false,
+              reason: `Phase ${phaseId} verify-phase evidence is stale (predates latest commit). Re-run: kata verify-phase ${phaseId} --issue=${issueNumber}`,
+            }
+          }
+        }
+      } catch {
+        // Unreadable evidence file — treat as not run
+        return {
+          passed: false,
+          reason: `verify-phase has not been run. Run: kata verify-phase <phaseId> --issue=${issueNumber}`,
+        }
+      }
+    }
+
+    return { passed: true }
+  } catch {
+    return {
+      passed: false,
+      reason: `verify-phase has not been run. Run: kata verify-phase <phaseId> --issue=${issueNumber}`,
+    }
+  }
+}
+
+/**
+ * Check that at least one new test function was added in this session vs diff_base.
+ * Reads project.diff_base and project.test_file_pattern from wm.yaml.
+ */
+function checkFeatureTestsAdded(): { passed: boolean; newTestCount?: number } {
+  try {
+    const cfg = loadWmConfig()
+    const diffBase = cfg.project?.diff_base ?? 'origin/main'
+    const testFilePattern = cfg.project?.test_file_pattern ?? '*.test.ts,*.spec.ts'
+    const patterns = testFilePattern.split(',').map((p) => p.trim().replace(/^\*/, ''))
+
+    // Get changed files vs diff_base
+    const changedFiles = execSync(
+      `git diff --name-only "${diffBase}" 2>/dev/null || true`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+      .trim()
+      .split('\n')
+      .filter((f) => f && patterns.some((ext) => f.endsWith(ext)))
+
+    if (changedFiles.length === 0) {
+      return { passed: false, newTestCount: 0 }
+    }
+
+    // Count new test function declarations added
+    const diffOutput = execSync(
+      `git diff "${diffBase}" -- ${changedFiles.map((f) => `"${f}"`).join(' ')} 2>/dev/null || true`,
+      { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] },
+    )
+
+    const newTestFunctions = (
+      diffOutput.match(/^\+(it|test|describe)\s*\(/gm) ?? []
+    ).length
+
+    return { passed: newTestFunctions > 0, newTestCount: newTestFunctions }
+  } catch {
+    // Don't block exit on error — git may not be available
+    return { passed: true }
   }
 }
 
@@ -197,9 +325,27 @@ function validateCanExit(
         reasons.push(
           verifCheck.artifactType === 'verification_not_run'
             ? 'Verification not run'
-            : 'Verification failed',
+            : verifCheck.artifactType === 'verification_stale'
+              ? 'Verification evidence is stale (predates latest commit)'
+              : 'Verification failed',
         )
       }
+    }
+
+    // Check that verify-phase has been run and passed for this issue
+    if (issueNumber) {
+      const testsCheck = checkTestsPass(issueNumber)
+      if (!testsCheck.passed && testsCheck.reason) {
+        reasons.push(testsCheck.reason)
+      }
+    }
+
+    // Check that at least one new test function was added in this session
+    const featureTestsCheck = checkFeatureTestsAdded()
+    if (!featureTestsCheck.passed) {
+      reasons.push(
+        'At least one new test function required (it/test/describe). See: arXiv 2402.13521',
+      )
     }
   }
 
