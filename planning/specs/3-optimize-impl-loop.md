@@ -2,7 +2,7 @@
 initiative: GH#3-optimize-impl-loop
 type: project
 issue_type: feature
-status: draft
+status: approved
 priority: high
 roadmap: null
 owner: platform-engineering
