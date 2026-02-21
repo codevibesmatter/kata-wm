@@ -11,15 +11,32 @@ phases:
   - id: p1
     name: Fixture web app
     description: Minimal Node.js web app for evals to operate on
+    tasks:
+      - "Create eval-fixtures/web-app/ with package.json, src/routes/, src/controllers/, src/models/, src/index.ts, tests/"
+      - "Install kata batteries in eval-fixtures/web-app/ (.claude/ config + strict hooks)"
+      - "Add .github/ISSUE_TEMPLATE/ and wm-labels.json to fixture"
   - id: p2
     name: Eval harness
     description: Runner that drives Claude through full mode flows via API
+    tasks:
+      - "Create eval/harness.ts: spawn Claude session, drive conversation, capture state at checkpoints"
+      - "Create eval/assertions.ts: eval-specific assertions extending src/testing/assertions.ts"
+      - "Create eval/run.ts: entry point, parse --scenario arg, run and report results"
+      - "Add 'eval' script to package.json: tsx eval/run.ts"
   - id: p3
     name: Eval scenarios
     description: Task, planning, and implementation mode eval definitions
+    tasks:
+      - "Create eval/scenarios/task-mode.ts: /health route scenario with 5 assertions"
+      - "Create eval/scenarios/planning-mode.ts: user auth planning scenario with 6 assertions"
+      - "Run scenarios manually against fixture, iterate until passing"
   - id: p4
     name: CI integration
     description: Nightly eval runner with pass/fail reporting
+    tasks:
+      - "Create .github/workflows/eval.yml: nightly schedule + manual dispatch"
+      - "Store results as GitHub Actions artifacts"
+      - "Add eval badge to README"
 ---
 
 # Agentic Eval Suite: Full Mode Flow Tests
