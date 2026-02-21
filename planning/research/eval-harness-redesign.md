@@ -65,7 +65,7 @@ Tests task/planning/implementation against an existing real project.
 
 ### Keep
 - `settingSources: ['project']` — how hooks fire
-- `permissionMode: 'acceptEdits'` — agent autonomy
+- `permissionMode: 'bypassPermissions'` — full agent autonomy, no approval prompts
 - `allowedTools` — tool control
 - Transcript writing — debugging
 - Checkpoints/assertions — validation
