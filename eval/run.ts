@@ -26,13 +26,14 @@ import { researchModeScenario } from './scenarios/research-mode.js'
 import { modeEntryScenario } from './scenarios/mode-entry.js'
 import { askUserPauseScenario } from './scenarios/ask-user-pause.js'
 import { planningAuthScenario } from './scenarios/planning-auth.js'
+import { implAuthScenario } from './scenarios/impl-auth.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TRANSCRIPT_DIR = resolve(__dirname, '../eval-transcripts')
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
-const scenarios = [askUserPauseScenario, modeEntryScenario, onboardScenario, taskModeScenario, planningModeScenario, planningAuthScenario, researchModeScenario]
+const scenarios = [askUserPauseScenario, modeEntryScenario, onboardScenario, taskModeScenario, planningModeScenario, planningAuthScenario, implAuthScenario, researchModeScenario]
 
 // ─── CLI ──────────────────────────────────────────────────────────────────────
 
