@@ -3,13 +3,14 @@
  * Eval runner — entry point for kata-wm agentic eval suite.
  *
  * Usage:
- *   npm run eval                              # Run all scenarios
- *   npm run eval -- --scenario=task-mode
- *   npm run eval -- --scenario=planning-mode
- *   npm run eval -- --json                   # JSON output
- *   npm run eval -- --list                   # List available scenarios
- *   npm run eval -- --verbose                # Stream agent output in real time
- *   npm run eval -- --no-transcript          # Skip writing transcript files
+ *   npm run eval                              # Run all scenarios (fresh projects)
+ *   npm run eval -- --scenario=task-mode      # Run one scenario
+ *   npm run eval -- --project=/path/to/dir    # Run against existing project
+ *   npm run eval -- --resume=<session_id> --answer="Summary"  # Resume paused session
+ *   npm run eval -- --json                    # JSON output
+ *   npm run eval -- --list                    # List available scenarios
+ *   npm run eval -- --verbose                 # Stream agent output in real time
+ *   npm run eval -- --no-transcript           # Skip writing transcript files
  */
 
 import { mkdirSync } from 'node:fs'
@@ -35,6 +36,9 @@ const listMode = args.includes('--list')
 const verbose = args.includes('--verbose')
 const noTranscript = args.includes('--no-transcript')
 const scenarioArg = args.find((a) => a.startsWith('--scenario='))?.split('=')[1]
+const projectArg = args.find((a) => a.startsWith('--project='))?.split('=')[1]
+const resumeArg = args.find((a) => a.startsWith('--resume='))?.split('=')[1]
+const answerArg = args.find((a) => a.startsWith('--answer='))?.split('=')[1]
 
 if (listMode) {
   console.log('Available scenarios:')
@@ -44,22 +48,6 @@ if (listMode) {
   process.exit(0)
 }
 
-// Agent SDK uses Claude Code's existing auth — no ANTHROPIC_API_KEY needed.
-
-const toRun = scenarioArg
-  ? scenarios.filter((s) => s.id === scenarioArg)
-  : scenarios
-
-if (toRun.length === 0) {
-  process.stderr.write(`Unknown scenario: ${scenarioArg}\n`)
-  process.stderr.write(`Available: ${scenarios.map((s) => s.id).join(', ')}\n`)
-  process.exit(1)
-}
-
-if (!noTranscript) {
-  mkdirSync(TRANSCRIPT_DIR, { recursive: true })
-}
-
 // ─── Run ──────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -67,27 +55,86 @@ async function main(): Promise<void> {
   let overallPassed = true
   const runTs = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
 
-  for (const scenario of toRun) {
+  // Resume mode — continue a paused session
+  if (resumeArg) {
+    // For resume, we need a scenario (for checkpoints) and a project dir
+    const scenario = scenarioArg
+      ? scenarios.find((s) => s.id === scenarioArg)
+      : scenarios[0]
+
+    if (!scenario) {
+      process.stderr.write(`Unknown scenario: ${scenarioArg}\n`)
+      process.exit(1)
+    }
+
+    if (projectArg) {
+      scenario.projectDir = projectArg
+    }
+
     if (!jsonMode) {
-      process.stdout.write(`\n▶ Running: ${scenario.name} (${scenario.id})\n`)
+      process.stdout.write(`\n▶ Resuming: ${scenario.name} (session: ${resumeArg})\n`)
     }
 
     const transcriptPath = noTranscript
       ? undefined
-      : resolve(TRANSCRIPT_DIR, `${scenario.id}-${runTs}.jsonl`)
+      : resolve(TRANSCRIPT_DIR, `${scenario.id}-resume-${runTs}.jsonl`)
 
-    if (transcriptPath && !jsonMode) {
-      process.stdout.write(`  Transcript: ${transcriptPath}\n`)
-    }
-
-    const result = await runScenario(scenario, { verbose: verbose && !jsonMode, transcriptPath })
+    const result = await runScenario(scenario, {
+      verbose: verbose && !jsonMode,
+      transcriptPath,
+      resumeSessionId: resumeArg,
+      resumeAnswer: answerArg,
+    })
     results.push(result)
 
-    if (!jsonMode) {
-      printResult(result)
+    if (!jsonMode) printResult(result)
+    if (!result.passed && !result.pendingQuestion) overallPassed = false
+  } else {
+    // Normal mode — run scenarios
+    const toRun = scenarioArg
+      ? scenarios.filter((s) => s.id === scenarioArg)
+      : scenarios
+
+    if (toRun.length === 0) {
+      process.stderr.write(`Unknown scenario: ${scenarioArg}\n`)
+      process.stderr.write(`Available: ${scenarios.map((s) => s.id).join(', ')}\n`)
+      process.exit(1)
     }
 
-    if (!result.passed) overallPassed = false
+    if (!noTranscript) {
+      mkdirSync(TRANSCRIPT_DIR, { recursive: true })
+    }
+
+    for (const scenario of toRun) {
+      // Override project dir if --project flag provided
+      if (projectArg) {
+        scenario.projectDir = projectArg
+      }
+
+      if (!jsonMode) {
+        process.stdout.write(`\n▶ Running: ${scenario.name} (${scenario.id})\n`)
+        if (scenario.projectDir) {
+          process.stdout.write(`  Project: ${scenario.projectDir}\n`)
+        }
+      }
+
+      const transcriptPath = noTranscript
+        ? undefined
+        : resolve(TRANSCRIPT_DIR, `${scenario.id}-${runTs}.jsonl`)
+
+      if (transcriptPath && !jsonMode) {
+        process.stdout.write(`  Transcript: ${transcriptPath}\n`)
+      }
+
+      const result = await runScenario(scenario, { verbose: verbose && !jsonMode, transcriptPath })
+      results.push(result)
+
+      if (!jsonMode) {
+        printResult(result)
+      }
+
+      if (!result.passed && !result.pendingQuestion) overallPassed = false
+    }
   }
 
   if (jsonMode) {
@@ -100,11 +147,27 @@ async function main(): Promise<void> {
 }
 
 function printResult(result: EvalResult): void {
+  if (result.pendingQuestion) {
+    console.log(`⏸ PAUSED ${result.scenarioName}`)
+    console.log(`   Session: ${result.pendingQuestion.sessionId}`)
+    console.log(`   Project: ${result.projectDir}`)
+    console.log('   Questions:')
+    for (const q of result.pendingQuestion.questions) {
+      console.log(`     ${q.header}: ${q.question}`)
+      for (let i = 0; i < q.options.length; i++) {
+        console.log(`       ${i + 1}. ${q.options[i].label}`)
+      }
+    }
+    console.log(`   Resume: npm run eval -- --scenario=${result.scenarioId} --project="${result.projectDir}" --resume=${result.pendingQuestion.sessionId} --answer="<choice>"`)
+    return
+  }
+
   const status = result.passed ? '✅ PASS' : '❌ FAIL'
   console.log(`${status} ${result.scenarioName}`)
   console.log(
     `   Turns: ${result.turns}  Tokens: ${result.inputTokens.toLocaleString()}in/${result.outputTokens.toLocaleString()}out  Duration: ${Math.round(result.durationMs / 1000)}s  Cost: $${result.costUsd.toFixed(4)}`,
   )
+  console.log(`   Project: ${result.projectDir}`)
 
   for (const a of result.assertions) {
     const mark = a.passed ? '  ✓' : '  ✗'
@@ -121,19 +184,20 @@ function printResult(result: EvalResult): void {
 
 function printSummary(results: EvalResult[]): void {
   const passed = results.filter((r) => r.passed).length
+  const paused = results.filter((r) => r.pendingQuestion).length
   const total = results.length
   const totalTokens = results.reduce((s, r) => s + r.inputTokens + r.outputTokens, 0)
   const totalMs = results.reduce((s, r) => s + r.durationMs, 0)
   const totalCost = results.reduce((s, r) => s + r.costUsd, 0)
 
   console.log(`\n${'─'.repeat(60)}`)
-  console.log(`Results: ${passed}/${total} scenarios passed`)
+  console.log(`Results: ${passed}/${total} passed${paused > 0 ? `, ${paused} paused` : ''}`)
   console.log(`Total tokens: ${totalTokens.toLocaleString()}`)
   console.log(`Total time: ${Math.round(totalMs / 1000)}s`)
   console.log(`Total cost: $${totalCost.toFixed(4)}`)
 
-  if (passed < total) {
-    const failed = results.filter((r) => !r.passed).map((r) => r.scenarioId)
+  if (passed < total - paused) {
+    const failed = results.filter((r) => !r.passed && !r.pendingQuestion).map((r) => r.scenarioId)
     console.log(`Failed: ${failed.join(', ')}`)
   }
 }

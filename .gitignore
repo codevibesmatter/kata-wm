@@ -3,3 +3,5 @@ dist/
 *.tgz
 tsconfig.tsbuildinfo
 .turbo/
+eval-projects/
+eval-transcripts/

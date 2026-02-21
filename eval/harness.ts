@@ -4,19 +4,23 @@
  * Uses @anthropic-ai/claude-agent-sdk which runs the same agent loop as Claude Code,
  * with real tool execution (Bash, Read, Write, Edit, etc.).
  *
- * Note: .claude/settings.json CLI hooks do NOT fire when using the SDK — the SDK
- * has its own in-process hook system. Kata context is injected via CLAUDE.md
- * (loaded via settingSources: ['project']) plus kata prime output appended to
- * the system prompt.
+ * settingSources: ['project'] loads .claude/settings.json which includes kata hooks
+ * (SessionStart, UserPromptSubmit, Stop). Hooks fire naturally — no manual context
+ * injection needed.
  *
- * Lifecycle per scenario:
- *   1. Copy fixture web app to a fresh temp directory
- *   2. Git init + initial commit in the temp project
- *   3. Run each checkpoint assertion against the evolved project state
- *   4. Return EvalResult with per-assertion pass/fail + token/cost stats
+ * Two project modes:
+ *   - fresh: copy fixture to a persistent eval-projects/ dir (for onboarding tests)
+ *   - existing: point at a real project dir (for iterative task/planning/impl tests)
+ *
+ * AskUserQuestion flow:
+ *   When the agent asks a clarifying question, a PreToolUse hook stops the session.
+ *   The harness writes question + session_id to stdout and exits. The parent agent
+ *   (running this as a background task) sees the output via TaskOutput, then resumes
+ *   with: npx tsx eval/run.ts --resume=<session_id> --answer="..."
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import type { HookCallback } from '@anthropic-ai/claude-agent-sdk'
 import {
   appendFileSync,
   cpSync,
@@ -24,18 +28,16 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  rmSync,
+  writeFileSync,
 } from 'node:fs'
-import { execSync, spawnSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { join, resolve, dirname } from 'node:path'
-import { tmpdir } from 'node:os'
-import { randomBytes } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import type { SessionState } from '../src/state/schema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURE_PATH = resolve(__dirname, '../eval-fixtures/web-app')
-const KATA_BIN = resolve(__dirname, '../kata')
+const EVAL_PROJECTS_DIR = resolve(__dirname, '../eval-projects')
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,11 +56,16 @@ export interface EvalScenario {
   maxTurns?: number
   /** Timeout in ms (default: 10 min) */
   timeoutMs?: number
+  /**
+   * Project directory to run against.
+   * - If omitted, copies eval-fixtures/web-app to eval-projects/<id>-<timestamp>/
+   * - If set, uses the existing directory as-is (for long-standing project evals)
+   */
+  projectDir?: string
 }
 
 export interface EvalContext {
   projectDir: string
-  sessionId: string
   getSessionState(): SessionState | null
   run(cmd: string): string
   fileExists(relativePath: string): boolean
@@ -76,7 +83,21 @@ export interface EvalResult {
   inputTokens: number
   outputTokens: number
   costUsd: number
+  projectDir: string
+  sessionId?: string
+  /** Set when the agent asked a question and the session was paused */
+  pendingQuestion?: PendingQuestion
   transcriptPath?: string
+}
+
+export interface PendingQuestion {
+  sessionId: string
+  questions: Array<{
+    question: string
+    header: string
+    options: Array<{ label: string; description: string }>
+    multiSelect: boolean
+  }>
 }
 
 export interface HarnessOptions {
@@ -84,6 +105,10 @@ export interface HarnessOptions {
   verbose?: boolean
   /** Write full JSONL transcript to this path (auto-created dir if needed) */
   transcriptPath?: string
+  /** Resume a paused session instead of starting a new one */
+  resumeSessionId?: string
+  /** Answer to provide when resuming (sent as the prompt) */
+  resumeAnswer?: string
 }
 
 // ─── Harness ──────────────────────────────────────────────────────────────────
@@ -93,7 +118,20 @@ export async function runScenario(
   options: HarnessOptions = {},
 ): Promise<EvalResult> {
   const startMs = Date.now()
-  const projectDir = join(tmpdir(), `kata-eval-${randomBytes(8).toString('hex')}`)
+
+  // Resolve project directory
+  let projectDir: string
+  if (scenario.projectDir) {
+    projectDir = resolve(scenario.projectDir)
+    if (!existsSync(projectDir)) {
+      throw new Error(`Project directory does not exist: ${projectDir}`)
+    }
+  } else {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    projectDir = join(EVAL_PROJECTS_DIR, `${scenario.id}-${ts}`)
+    mkdirSync(projectDir, { recursive: true })
+    cpSync(FIXTURE_PATH, projectDir, { recursive: true })
+  }
 
   const result: EvalResult = {
     scenarioId: scenario.id,
@@ -105,6 +143,7 @@ export async function runScenario(
     inputTokens: 0,
     outputTokens: 0,
     costUsd: 0,
+    projectDir,
   }
 
   if (options.transcriptPath) {
@@ -112,59 +151,91 @@ export async function runScenario(
     result.transcriptPath = options.transcriptPath
   }
 
-  const GIT_ENV = {
-    ...process.env,
-    GIT_AUTHOR_NAME: 'kata-eval',
-    GIT_AUTHOR_EMAIL: 'eval@kata.test',
-    GIT_COMMITTER_NAME: 'kata-eval',
-    GIT_COMMITTER_EMAIL: 'eval@kata.test',
-  }
+  // Track pending question — set by the PreToolUse hook when AskUserQuestion fires
+  let pendingQuestion: PendingQuestion | null = null
+  let sessionId: string | undefined
 
-  const remoteDir = `${projectDir}-remote.git`
+  // Hook: intercept AskUserQuestion and stop the session so the parent agent
+  // can provide an answer and resume.
+  const interceptQuestion: HookCallback = async (input) => {
+    const questions = (input as { tool_input?: { questions?: PendingQuestion['questions'] } })
+      .tool_input?.questions
 
-  try {
-    // ── 1. Copy fixture to temp dir ──────────────────────────────────────────
-    cpSync(FIXTURE_PATH, projectDir, { recursive: true })
+    if (questions && sessionId) {
+      pendingQuestion = { sessionId, questions }
 
-    // ── 2. Git init + initial commit + bare remote ───────────────────────────
-    // Create a bare remote first so the agent can `git push` without errors.
-    execSync(`git init --bare ${remoteDir}`, { env: GIT_ENV, stdio: 'pipe' })
-    execSync(
-      `git init && git remote add origin ${remoteDir} && git add -A && git commit -m "chore: initial fixture" && git push -u origin master`,
-      { cwd: projectDir, env: GIT_ENV, stdio: 'pipe' },
-    )
+      // Write to stdout so parent agent sees via TaskOutput
+      process.stdout.write('\n[QUESTION] Agent needs input:\n')
+      for (const q of questions) {
+        process.stdout.write(`  ${q.header}: ${q.question}\n`)
+        for (let i = 0; i < q.options.length; i++) {
+          process.stdout.write(`    ${i + 1}. ${q.options[i].label} — ${q.options[i].description}\n`)
+        }
+      }
+      process.stdout.write(`[QUESTION] session_id=${sessionId}\n`)
+      process.stdout.write('[QUESTION] Resume with: --resume=<session_id> --answer="<answer>"\n\n')
 
-    // ── 3. Build eval context ────────────────────────────────────────────────
-    const ctx: EvalContext = buildContext(projectDir)
+      // Also write to a file for structured access
+      const evalDir = join(projectDir, '.eval')
+      mkdirSync(evalDir, { recursive: true })
+      writeFileSync(
+        join(evalDir, 'pending-question.json'),
+        JSON.stringify(pendingQuestion, null, 2),
+      )
 
-    // ── 4. Build system prompt appendage from kata prime ─────────────────────
-    const kataContext = getKataContext(projectDir, ctx.sessionId)
-
-    // ── 5. Run scenario via Agent SDK ────────────────────────────────────────
-    // Unset CLAUDECODE so the spawned claude process isn't blocked by the
-    // "cannot launch inside another Claude Code session" guard.
-    const { CLAUDECODE: _cc, ...baseEnv } = process.env
-    const agentEnv = {
-      ...baseEnv,
-      CLAUDE_PROJECT_DIR: projectDir,
-      GIT_AUTHOR_NAME: 'kata-eval',
-      GIT_AUTHOR_EMAIL: 'eval@kata.test',
-      GIT_COMMITTER_NAME: 'kata-eval',
-      GIT_COMMITTER_EMAIL: 'eval@kata.test',
+      // Stop the session
+      return {
+        hookSpecificOutput: {
+          hookEventName: input.hook_event_name,
+          permissionDecision: 'deny',
+          permissionDecisionReason: 'Question requires external input. Session paused for answer.',
+        },
+        continue: false,
+        stopReason: 'AskUserQuestion: session paused for external input',
+      }
     }
 
-    for await (const message of query({
-      prompt: scenario.prompt,
-      options: {
-        cwd: projectDir,
-        ...(scenario.maxTurns !== undefined && { maxTurns: scenario.maxTurns }),
-        allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Task'],
-        permissionMode: 'acceptEdits',
-        settingSources: ['project'],
-        appendSystemPrompt: kataContext,
-        env: agentEnv,
+    return {}
+  }
+
+  try {
+    // Unset CLAUDECODE so the spawned SDK process isn't blocked by the
+    // "cannot launch inside another Claude Code session" guard.
+    const { CLAUDECODE: _cc, ...baseEnv } = process.env
+
+    const isResume = !!options.resumeSessionId
+
+    const queryOptions: Record<string, unknown> = {
+      cwd: projectDir,
+      allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Task', 'AskUserQuestion'],
+      permissionMode: 'bypassPermissions',
+      settingSources: ['project'],
+      hooks: {
+        PreToolUse: [{ matcher: 'AskUserQuestion', hooks: [interceptQuestion] }],
       },
-    })) {
+      env: baseEnv,
+    }
+
+    if (isResume) {
+      queryOptions.resume = options.resumeSessionId
+    } else if (scenario.maxTurns !== undefined) {
+      queryOptions.maxTurns = scenario.maxTurns
+    }
+
+    const prompt = isResume
+      ? (options.resumeAnswer ?? 'Continue.')
+      : scenario.prompt
+
+    for await (const message of query({ prompt, options: queryOptions })) {
+      // Capture session ID from init message
+      if (
+        (message as { type: string; subtype?: string; session_id?: string }).type === 'system' &&
+        (message as { subtype?: string }).subtype === 'init'
+      ) {
+        sessionId = (message as { session_id: string }).session_id
+        result.sessionId = sessionId
+      }
+
       // Write every event to transcript
       if (options.transcriptPath) {
         appendFileSync(
@@ -183,8 +254,6 @@ export async function runScenario(
           emitToolResults(message)
         }
       } else if (message.type === 'result') {
-        // Sum modelUsage for accurate totals (usage.input_tokens only counts
-        // non-cached tokens; cached input is the majority in long sessions).
         const modelUsage = Object.values(message.modelUsage ?? {})
         result.inputTokens = modelUsage.reduce(
           (s, u) => s + u.inputTokens + u.cacheReadInputTokens + u.cacheCreationInputTokens,
@@ -200,26 +269,28 @@ export async function runScenario(
       }
     }
 
-    // ── 6. Run all checkpoints on final project state ─────────────────────────
-    for (const checkpoint of scenario.checkpoints) {
-      const error = await checkpoint.assert(ctx)
-      result.assertions.push({
-        name: checkpoint.name,
-        passed: error === null,
-        error: error ?? undefined,
-      })
+    // If session was paused for a question, attach it to the result
+    if (pendingQuestion) {
+      result.pendingQuestion = pendingQuestion
+      if (options.verbose) {
+        process.stdout.write(`[paused] Session paused for AskUserQuestion. session_id=${sessionId}\n`)
+      }
+    } else {
+      // Session completed — run checkpoints
+      const ctx: EvalContext = buildContext(projectDir)
+      for (const checkpoint of scenario.checkpoints) {
+        const error = await checkpoint.assert(ctx)
+        result.assertions.push({
+          name: checkpoint.name,
+          passed: error === null,
+          error: error ?? undefined,
+        })
+      }
+      result.passed = result.assertions.every((a) => a.passed)
     }
-
-    result.passed = result.assertions.every((a) => a.passed)
   } finally {
     result.durationMs = Date.now() - startMs
-    for (const dir of [projectDir, remoteDir]) {
-      try {
-        rmSync(dir, { recursive: true, force: true })
-      } catch {
-        // ignore
-      }
-    }
+    // No cleanup — projects persist for inspection and iteration
   }
 
   return result
@@ -263,7 +334,6 @@ function formatToolInput(name: string, input: unknown): string {
   if (!input || typeof input !== 'object') return ''
   const obj = input as Record<string, unknown>
 
-  // Show most useful field for common tools
   if (name === 'Bash' && obj.command) return String(obj.command).slice(0, 120)
   if ((name === 'Read' || name === 'Write' || name === 'Edit') && obj.file_path)
     return String(obj.file_path)
@@ -276,21 +346,14 @@ function formatToolInput(name: string, input: unknown): string {
 // ─── Context builder ──────────────────────────────────────────────────────────
 
 function buildContext(projectDir: string): EvalContext {
-  const sessionId = randomBytes(16)
-    .toString('hex')
-    .replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5')
-
   return {
     projectDir,
-    sessionId,
     getSessionState(): SessionState | null {
-      // SDK creates its own session; look for any session state file
       const sessionsDir = join(projectDir, '.claude', 'sessions')
       if (!existsSync(sessionsDir)) return null
       try {
         const sessions = readdirSync(sessionsDir)
         if (sessions.length === 0) return null
-        // Use the most recently modified session
         const latest = sessions
           .map((id) => ({ id, path: join(sessionsDir, id, 'state.json') }))
           .filter(({ path }) => existsSync(path))
@@ -329,36 +392,4 @@ function buildContext(projectDir: string): EvalContext {
       return readdirSync(abs)
     },
   }
-}
-
-/**
- * Get kata context injection to append to the system prompt.
- * Tries kata prime first; falls back to a minimal kata summary.
- */
-function getKataContext(projectDir: string, sessionId: string): string {
-  const result = spawnSync(KATA_BIN, ['prime', `--session=${sessionId}`], {
-    cwd: projectDir,
-    env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir, CLAUDE_SESSION_ID: sessionId },
-    encoding: 'utf-8',
-  })
-
-  if (result.status === 0 && result.stdout?.trim()) {
-    return result.stdout
-  }
-
-  // Minimal fallback
-  return `
-## kata Workflow Management
-
-This project uses kata-wm. Always enter a mode before working:
-  kata enter task          # For small focused changes (< 1 hour)
-  kata enter planning      # For designing new features
-  kata enter implementation --issue=N  # For implementing approved specs
-  kata status              # Check current mode
-
-Rules:
-- NEVER skip mode entry
-- Complete all tasks shown in TaskList before exiting
-- Run kata can-exit to verify exit conditions are met
-`.trim()
 }
