@@ -87,10 +87,9 @@ export const planningModeScenario: EvalScenario = {
   id: 'planning-mode',
   name: 'Planning mode: user authentication feature spec',
   prompt:
-    'Plan a user authentication feature for the web app. ' +
-    'Use kata planning mode to research the existing codebase, write a spec with at least ' +
-    'one behavior section (B1, B2, etc.), and get it to approved status. ' +
-    'The spec should cover JWT-based auth with login and protected routes.',
+    'Use kata planning to design a user authentication feature for this web app. ' +
+    'The feature should cover JWT-based auth with login and protected routes. ' +
+    'Produce an approved spec and commit it.',
   timeoutMs: 15 * 60 * 1000,
   checkpoints: [
     assertCurrentMode('planning'),
