@@ -7,6 +7,9 @@ modes:
   research:
     name: "Research"
     description: "Explore → synthesize findings"
+    stop_conditions:
+      - tasks_complete
+      - committed
     intent_keywords:
       - "research"
       - "explore"
@@ -37,6 +40,9 @@ modes:
     name: "Planning"
     description: "Research → spec → review → approved"
     issue_handling: "required"
+    stop_conditions:
+      - tasks_complete
+      - committed
     intent_keywords:
       - "plan feature"
       - "spec"
@@ -70,6 +76,13 @@ modes:
     name: "Implementation"
     description: "Execute approved specs - phases defined in spec YAML frontmatter"
     issue_handling: "required"
+    stop_conditions:
+      - tasks_complete
+      - committed
+      - pushed
+      - verification
+      - tests_pass
+      - feature_tests_added
     intent_keywords:
       - "implement"
       - "build"
@@ -105,6 +118,9 @@ modes:
     name: "Task"
     description: "Combined planning + implementation for small tasks and chores"
     issue_handling: "none"
+    stop_conditions:
+      - tasks_complete
+      - committed
     intent_keywords:
       - "task:"
       - "chore"
@@ -139,6 +155,7 @@ modes:
   freeform:
     name: "Freeform"
     description: "Quick questions and discussion (no phases)"
+    stop_conditions: []
     intent_keywords:
       - "question"
       - "how does"
@@ -175,6 +192,7 @@ modes:
   onboard:
     name: "Onboard"
     description: "Configure kata for a new project via guided interview"
+    stop_conditions: []
     intent_keywords:
       - "onboard"
       - "setup kata"

@@ -167,6 +167,7 @@ export const ModeConfigSchema = z.object({
   redirect_to: z.string().optional(),
   micro_planning: z.boolean().optional(),
   issue_handling: z.enum(['required', 'none']).optional(), // How issues are handled on entry
+  stop_conditions: z.array(z.string()).optional(), // Which checks to run before allowing exit
   behavior: ModeBehaviorSchema.optional(), // Behavioral guidance
 })
 

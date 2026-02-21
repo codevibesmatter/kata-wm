@@ -39,39 +39,35 @@ function parseArgs(args: string[]): {
 }
 
 /**
- * Check global conditions (committed, pushed)
+ * Check git conditions (committed, pushed) based on which checks are active
  */
-function checkGlobalConditions(): { passed: boolean; reasons: string[] } {
+function checkGlobalConditions(checks: Set<string>): { passed: boolean; reasons: string[] } {
   const reasons: string[] = []
 
   try {
-    // Check for uncommitted changes
-    const gitStatus = execSync('git status --porcelain 2>/dev/null || true', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
+    if (checks.has('committed')) {
+      const gitStatus = execSync('git status --porcelain 2>/dev/null || true', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
 
-    if (gitStatus) {
-      // Filter to only tracked files (not ?? untracked)
-      const changedFiles = gitStatus.split('\n').filter((line) => !line.startsWith('??'))
-
-      if (changedFiles.length > 0) {
-        reasons.push('Uncommitted changes in tracked files')
+      if (gitStatus) {
+        const changedFiles = gitStatus.split('\n').filter((line) => !line.startsWith('??'))
+        if (changedFiles.length > 0) {
+          reasons.push('Uncommitted changes in tracked files')
+        }
       }
     }
 
-    // Check if HEAD has been pushed to ANY remote
-    // Worktrees may have multiple remotes (origin, github) and some may refuse
-    // pushes (e.g., origin points to a non-bare repo with the branch checked out).
-    // Rather than checking a specific remote, check if any remote branch contains HEAD.
-    const remoteBranches = execSync('git branch -r --contains HEAD 2>/dev/null || true', {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim()
+    if (checks.has('pushed')) {
+      const remoteBranches = execSync('git branch -r --contains HEAD 2>/dev/null || true', {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }).trim()
 
-    if (!remoteBranches) {
-      // HEAD is not on any remote branch — unpushed
-      reasons.push('Unpushed commits')
+      if (!remoteBranches) {
+        reasons.push('Unpushed commits')
+      }
     }
   } catch {
     // Git errors shouldn't block exit
@@ -266,13 +262,13 @@ function checkFeatureTestsAdded(): { passed: boolean; newTestCount?: number } {
 }
 
 /**
- * Check if exit conditions are met based on native tasks (~/.claude/tasks/{session}/)
- * Returns artifact type for guidance messages instead of hardcoded strings
+ * Check if exit conditions are met based on the mode's stop_conditions from modes.yaml.
+ * Each mode declares which checks to run — no hardcoded mode names.
  */
 function validateCanExit(
   _workflowId: string,
   sessionId: string,
-  sessionType: string,
+  stopConditions: string[],
   issueNumber?: number,
 ): {
   canExit: boolean
@@ -284,15 +280,17 @@ function validateCanExit(
   const reasons: string[] = []
   let artifactType: string | undefined
 
-  // Skip checks for freeform/default mode
-  if (sessionType === 'freeform' || sessionType === 'qa' || sessionType === 'default') {
+  // No stop conditions = can always exit
+  if (stopConditions.length === 0) {
     return { canExit: true, reasons: [], hasOpenTasks: false, usingTasks: false }
   }
 
-  // Check native tasks (~/.claude/tasks/{session-id}/)
-  const pendingCount = countPendingNativeTasks(sessionId)
+  const checks = new Set(stopConditions)
+
+  // ── tasks_complete ──
+  const pendingCount = checks.has('tasks_complete') ? countPendingNativeTasks(sessionId) : 0
   const hasOpenTasks = pendingCount > 0
-  const usingTasks = existsSync(getNativeTasksDir(sessionId))
+  const usingTasks = checks.has('tasks_complete') && existsSync(getNativeTasksDir(sessionId))
 
   if (hasOpenTasks) {
     const pendingTitles = getPendingNativeTaskTitles(sessionId)
@@ -305,12 +303,9 @@ function validateCanExit(
     }
   }
 
-  // Check Gemini verification for implementation mode (only if configured)
-  if (sessionType === 'implementation') {
+  // ── verification ── (only when a verify mechanism is configured)
+  if (checks.has('verification')) {
     const wmConfig = loadWmConfig()
-    // Verification runs when a verify mechanism exists, unless explicitly disabled (code_review: false)
-    // Verify mechanism: automated reviewer (codex|gemini) OR custom verify_command in wm.yaml
-    // Absence of code_review setting = enabled by default when mechanism is configured (backward-compat)
     const codeReviewDisabled = wmConfig.reviews?.code_review === false
     const reviewer = wmConfig.reviews?.code_reviewer
     const hasVerifyMechanism =
@@ -321,7 +316,6 @@ function validateCanExit(
       const verifCheck = checkVerificationEvidence(issueNumber)
       if (!verifCheck.passed && verifCheck.artifactType) {
         artifactType = verifCheck.artifactType
-        // Add a brief reason (detailed guidance comes from getArtifactMessage)
         reasons.push(
           verifCheck.artifactType === 'verification_not_run'
             ? 'Verification not run'
@@ -331,16 +325,18 @@ function validateCanExit(
         )
       }
     }
+  }
 
-    // Check that verify-phase has been run and passed for this issue
-    if (issueNumber) {
-      const testsCheck = checkTestsPass(issueNumber)
-      if (!testsCheck.passed && testsCheck.reason) {
-        reasons.push(testsCheck.reason)
-      }
+  // ── tests_pass ──
+  if (checks.has('tests_pass') && issueNumber) {
+    const testsCheck = checkTestsPass(issueNumber)
+    if (!testsCheck.passed && testsCheck.reason) {
+      reasons.push(testsCheck.reason)
     }
+  }
 
-    // Check that at least one new test function was added in this session
+  // ── feature_tests_added ──
+  if (checks.has('feature_tests_added')) {
     const featureTestsCheck = checkFeatureTestsAdded()
     if (!featureTestsCheck.passed) {
       reasons.push(
@@ -349,10 +345,12 @@ function validateCanExit(
     }
   }
 
-  // Check global conditions (only if tasks are done)
+  // ── committed + pushed (check after task/verification checks) ──
   if (reasons.length === 0) {
-    const globalCheck = checkGlobalConditions()
-    reasons.push(...globalCheck.reasons)
+    if (checks.has('committed') || checks.has('pushed')) {
+      const globalCheck = checkGlobalConditions(checks)
+      reasons.push(...globalCheck.reasons)
+    }
   }
 
   return {
@@ -422,13 +420,19 @@ export async function canExit(args: string[]): Promise<void> {
   const sessionType = state.sessionType || state.currentMode || 'default'
   const issueNumber = state.issueNumber ?? undefined
 
+  // Load mode config to get stop_conditions
+  const { loadModesConfig } = await import('../config/cache.js')
+  const modesConfig = await loadModesConfig()
+  const modeConfig = modesConfig.modes[sessionType]
+  const stopConditions = modeConfig?.stop_conditions ?? []
+
   const {
     canExit: canExitNow,
     reasons,
     artifactType,
     hasOpenTasks,
     usingTasks,
-  } = validateCanExit(workflowId, sessionId, sessionType, issueNumber)
+  } = validateCanExit(workflowId, sessionId, stopConditions, issueNumber)
 
   // Build guidance for stop hook (only if can't exit)
   const guidance = buildStopGuidance(

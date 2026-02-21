@@ -80,3 +80,46 @@ Project modes in `.claude/workflows/modes.yaml` are merged over the built-in set
 
 - **zod** — schema validation for `SessionState`, `ModeConfig`, and config files
 - **js-yaml** — YAML parsing for `modes.yaml`, `wm.yaml`, and template frontmatter
+
+## Data-driven design principles
+
+**No hardcoded mode names in logic.** Mode behavior is driven by fields in `modes.yaml`:
+- `issue_handling: "required" | "none"` — whether mode entry requires a GitHub issue
+- `stop_conditions: string[]` — which exit checks to run (`tasks_complete`, `committed`, `pushed`, `verification`, `tests_pass`, `feature_tests_added`). Empty array = can always exit.
+
+When adding new per-mode behavior, add a field to `modes.yaml` + `ModeConfigSchema`, never hardcode mode names in TypeScript.
+
+## Eval harness (`eval/`)
+
+Agentic eval suite using `@anthropic-ai/claude-agent-sdk`. The harness drives inner Claude agents through kata scenarios with real tool execution.
+
+### Key design decisions
+
+- **`settingSources: ['project']`** loads `.claude/settings.json` — hooks fire naturally in the SDK, no manual context injection needed. Never use `appendSystemPrompt` for hook context.
+- **`permissionMode: 'bypassPermissions'`** — full agent autonomy, no tool approval prompts.
+- **AskUserQuestion pause/resume** — a PreToolUse hook intercepts AskUserQuestion, stops the session (`continue: false`), outputs question + session_id. Resume with `--resume=<session_id> --answer="<choice>"`.
+- **Fixture per scenario** — `EvalScenario.fixture` field selects which `eval-fixtures/` dir to copy. Fresh projects get `git init` automatically.
+- **`CLAUDE_PROJECT_DIR` stripped** from inner agent env so it doesn't escape to the outer project.
+
+### Running evals
+
+```bash
+npx tsx eval/run.ts --scenario=onboard --verbose       # Single scenario
+npx tsx eval/run.ts --list                              # List scenarios
+npx tsx eval/run.ts --scenario=onboard --project=<dir> --resume=<sid> --answer="Quick"  # Resume paused
+```
+
+### Eval mode
+
+`eval` is a project-level mode override (`.claude/workflows/modes.yaml`), not in the batteries templates. Enter with `kata enter eval` — creates per-scenario tasks with dependency chains.
+
+### Fixtures
+
+| Fixture | Path | Description |
+|---------|------|-------------|
+| `tanstack-start` | `eval-fixtures/tanstack-start/` | Fresh TanStack Start app, no kata config |
+| `web-app` | `eval-fixtures/web-app/` | Pre-configured with kata hooks, wm.yaml, templates |
+
+## Project root resolution
+
+`findClaudeProjectDir()` walks up from cwd looking for `.claude/sessions/` or `.claude/workflows/`. It **stops at `.git` boundaries** to prevent escaping into a parent project (e.g., eval projects nested under this repo). If cwd has `.git` but no `.claude/`, it's a fresh project — the walk stops there.

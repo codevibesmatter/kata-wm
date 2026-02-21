@@ -1,0 +1,29 @@
+# Project-level mode overrides for kata-wm development
+# These modes are NOT included in the batteries templates — they're specific to this repo.
+
+modes:
+  eval:
+    name: "Eval"
+    description: "Run agentic eval scenarios — drive inner agents, verify results"
+    stop_conditions: []
+    intent_keywords:
+      - "eval"
+      - "run eval"
+      - "test scenario"
+    strong_signals:
+      - "eval mode"
+      - "run the eval"
+      - "evaluate"
+    template: "eval.md"
+    workflow_prefix: "EV"
+    category: system
+    behavior:
+      bias: "act"
+      entry_actions:
+        - check: "always"
+          then: "enter eval mode, list available scenarios"
+      never_ask:
+        - question: "Which scenario?"
+          instead: "List them and let the user pick, or run all"
+      ok_to_ask:
+        - "Ambiguous scenario selection"

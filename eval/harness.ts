@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url'
 import type { SessionState } from '../src/state/schema.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const FIXTURE_PATH = resolve(__dirname, '../eval-fixtures/web-app')
+const FIXTURES_DIR = resolve(__dirname, '../eval-fixtures')
 const EVAL_PROJECTS_DIR = resolve(__dirname, '../eval-projects')
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,8 +57,13 @@ export interface EvalScenario {
   /** Timeout in ms (default: 10 min) */
   timeoutMs?: number
   /**
+   * Fixture name under eval-fixtures/ to copy for fresh projects.
+   * Default: 'web-app'. Ignored when projectDir is set.
+   */
+  fixture?: string
+  /**
    * Project directory to run against.
-   * - If omitted, copies eval-fixtures/web-app to eval-projects/<id>-<timestamp>/
+   * - If omitted, copies eval-fixtures/<fixture> to eval-projects/<id>-<timestamp>/
    * - If set, uses the existing directory as-is (for long-standing project evals)
    */
   projectDir?: string
@@ -127,10 +132,23 @@ export async function runScenario(
       throw new Error(`Project directory does not exist: ${projectDir}`)
     }
   } else {
+    const fixtureName = scenario.fixture ?? 'web-app'
+    const fixturePath = join(FIXTURES_DIR, fixtureName)
+    if (!existsSync(fixturePath)) {
+      throw new Error(`Fixture not found: ${fixturePath}`)
+    }
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
     projectDir = join(EVAL_PROJECTS_DIR, `${scenario.id}-${ts}`)
     mkdirSync(projectDir, { recursive: true })
-    cpSync(FIXTURE_PATH, projectDir, { recursive: true })
+    cpSync(fixturePath, projectDir, { recursive: true })
+    // Initialize git repo so the inner agent has a working git context
+    execSync(
+      'git init -b main && ' +
+      'git config user.email "eval@kata-wm.test" && ' +
+      'git config user.name "Kata Eval" && ' +
+      'git add -A && git commit -m "Initial scaffold"',
+      { cwd: projectDir, stdio: ['pipe', 'pipe', 'pipe'] },
+    )
   }
 
   const result: EvalResult = {
@@ -201,7 +219,9 @@ export async function runScenario(
   try {
     // Unset CLAUDECODE so the spawned SDK process isn't blocked by the
     // "cannot launch inside another Claude Code session" guard.
-    const { CLAUDECODE: _cc, ...baseEnv } = process.env
+    // Override CLAUDE_PROJECT_DIR so the inner agent uses its own project dir,
+    // not the outer agent's.
+    const { CLAUDECODE: _cc, CLAUDE_PROJECT_DIR: _cpd, ...baseEnv } = process.env
 
     const isResume = !!options.resumeSessionId
 

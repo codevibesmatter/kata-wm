@@ -362,13 +362,16 @@ async function handleStopConditions(input: Record<string, unknown>): Promise<voi
   }
 
   const { state, sessionId } = session
+  const currentMode = state.currentMode || state.sessionType || 'default'
 
-  // Skip checks for freeform/default mode
-  if (
-    state.sessionType === 'freeform' ||
-    state.sessionType === 'qa' ||
-    state.currentMode === 'default'
-  ) {
+  // Load mode config to check stop_conditions
+  const { loadModesConfig } = await import('../config/cache.js')
+  const modesConfig = await loadModesConfig()
+  const modeConfig = modesConfig.modes[currentMode]
+  const stopConditions = modeConfig?.stop_conditions ?? []
+
+  // No stop conditions for this mode = allow exit
+  if (stopConditions.length === 0) {
     return
   }
 

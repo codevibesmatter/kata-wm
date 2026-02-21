@@ -47,7 +47,13 @@ export function findClaudeProjectDir(): string {
     ) {
       return dir
     }
-    dir = path.dirname(dir)
+    const parent = path.dirname(dir)
+    // Stop at git repo boundary — if this dir has .git, don't walk above it
+    // into a different project's .claude/
+    if (existsSync(path.join(dir, '.git'))) {
+      break
+    }
+    dir = parent
   }
 
   throw new Error(
