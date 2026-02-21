@@ -234,4 +234,117 @@ describe('canExit', () => {
     const hasVerificationReason = result.reasons.some((r) => r.includes('Verification'))
     expect(hasVerificationReason).toBe(false)
   })
+
+  it('checkTestsPass: blocks when no phase evidence files exist', async () => {
+    writeFileSync(
+      join(tmpDir, '.claude', 'workflows', 'wm.yaml'),
+      jsYaml.dump({ reviews: { code_reviewer: null } }),
+    )
+
+    createSessionState({
+      sessionType: 'implementation',
+      currentMode: 'implementation',
+      issueNumber: 444,
+    })
+
+    const output = await captureCanExit(['--json', `--session=${process.env.CLAUDE_SESSION_ID}`])
+    const result = JSON.parse(output) as { canExit: boolean; reasons: string[] }
+
+    const blockedByVerify = result.reasons.some((r) => r.includes('verify-phase has not been run'))
+    expect(blockedByVerify).toBe(true)
+  })
+
+  it('checkTestsPass: passes when phase evidence file exists with overallPassed true', async () => {
+    writeFileSync(
+      join(tmpDir, '.claude', 'workflows', 'wm.yaml'),
+      jsYaml.dump({ reviews: { code_reviewer: null } }),
+    )
+
+    createSessionState({
+      sessionType: 'implementation',
+      currentMode: 'implementation',
+      issueNumber: 333,
+    })
+
+    const evidenceDir = join(tmpDir, '.claude', 'verification-evidence')
+    mkdirSync(evidenceDir, { recursive: true })
+    writeFileSync(
+      join(evidenceDir, 'phase-p1-333.json'),
+      JSON.stringify({
+        phaseId: 'p1',
+        issueNumber: 333,
+        timestamp: new Date().toISOString(),
+        overallPassed: true,
+      }),
+    )
+
+    const output = await captureCanExit(['--json', `--session=${process.env.CLAUDE_SESSION_ID}`])
+    const result = JSON.parse(output) as { canExit: boolean; reasons: string[] }
+
+    const blockedByVerify = result.reasons.some((r) => r.includes('verify-phase has not been run'))
+    expect(blockedByVerify).toBe(false)
+  })
+
+  it('checkTestsPass: blocks when phase evidence overallPassed is false', async () => {
+    writeFileSync(
+      join(tmpDir, '.claude', 'workflows', 'wm.yaml'),
+      jsYaml.dump({ reviews: { code_reviewer: null } }),
+    )
+
+    createSessionState({
+      sessionType: 'implementation',
+      currentMode: 'implementation',
+      issueNumber: 222,
+    })
+
+    const evidenceDir = join(tmpDir, '.claude', 'verification-evidence')
+    mkdirSync(evidenceDir, { recursive: true })
+    writeFileSync(
+      join(evidenceDir, 'phase-p1-222.json'),
+      JSON.stringify({
+        phaseId: 'p1',
+        issueNumber: 222,
+        timestamp: new Date().toISOString(),
+        overallPassed: false,
+      }),
+    )
+
+    const output = await captureCanExit(['--json', `--session=${process.env.CLAUDE_SESSION_ID}`])
+    const result = JSON.parse(output) as { canExit: boolean; reasons: string[] }
+
+    const blockedByFailed = result.reasons.some((r) => r.includes('failed verify-phase'))
+    expect(blockedByFailed).toBe(true)
+  })
+
+  it('checkVerificationEvidence: blocks when evidence timestamp predates latest commit', async () => {
+    writeFileSync(
+      join(tmpDir, '.claude', 'workflows', 'wm.yaml'),
+      jsYaml.dump({ reviews: { code_reviewer: 'codex' } }),
+    )
+
+    createSessionState({
+      sessionType: 'implementation',
+      currentMode: 'implementation',
+      issueNumber: 111,
+    })
+
+    // Stale evidence — timestamp in the past
+    const evidenceDir = join(tmpDir, '.claude', 'verification-evidence')
+    mkdirSync(evidenceDir, { recursive: true })
+    writeFileSync(
+      join(evidenceDir, '111.json'),
+      JSON.stringify({
+        passed: true,
+        verifiedAt: '2020-01-01T00:00:00.000Z',
+      }),
+    )
+
+    const output = await captureCanExit(['--json', `--session=${process.env.CLAUDE_SESSION_ID}`])
+    const result = JSON.parse(output) as { canExit: boolean; reasons: string[] }
+
+    const blockedByStale = result.reasons.some(
+      (r) => r.includes('stale') || r.includes('Verification'),
+    )
+    expect(blockedByStale).toBe(true)
+  })
 })

@@ -255,7 +255,7 @@ function checkFeatureTestsAdded(): { passed: boolean; newTestCount?: number } {
     )
 
     const newTestFunctions = (
-      diffOutput.match(/^\+(it|test|describe)\s*\(/gm) ?? []
+      diffOutput.match(/^\+\s*(it|test|describe)\s*\(/gm) ?? []
     ).length
 
     return { passed: newTestFunctions > 0, newTestCount: newTestFunctions }
