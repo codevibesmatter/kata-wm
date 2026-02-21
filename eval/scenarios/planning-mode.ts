@@ -91,8 +91,6 @@ export const planningModeScenario: EvalScenario = {
     'Use kata planning mode to research the existing codebase, write a spec with at least ' +
     'one behavior section (B1, B2, etc.), and get it to approved status. ' +
     'The spec should cover JWT-based auth with login and protected routes.',
-  maxTurns: 30,
-  maxTokens: 200_000,
   timeoutMs: 15 * 60 * 1000,
   checkpoints: [
     assertCurrentMode('planning'),

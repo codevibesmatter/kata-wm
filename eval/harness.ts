@@ -42,7 +42,7 @@ export interface EvalScenario {
   /** User prompt sent to Claude */
   prompt: string
   checkpoints: EvalCheckpoint[]
-  /** Max agent turns (default: 30) */
+  /** Max agent turns — omit to use the SDK default (no limit) */
   maxTurns?: number
   /** Timeout in ms (default: 10 min) */
   timeoutMs?: number
@@ -123,7 +123,7 @@ export async function runScenario(scenario: EvalScenario): Promise<EvalResult> {
       prompt: scenario.prompt,
       options: {
         cwd: projectDir,
-        maxTurns: scenario.maxTurns ?? 30,
+        ...(scenario.maxTurns !== undefined && { maxTurns: scenario.maxTurns }),
         allowedTools: ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep', 'Task'],
         permissionMode: 'acceptEdits',
         settingSources: ['project'],

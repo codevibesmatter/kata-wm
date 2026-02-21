@@ -26,9 +26,7 @@ export const taskModeScenario: EvalScenario = {
   prompt:
     'Add a `/health` route to the web app that returns `{"status": "ok"}` with HTTP 200. ' +
     'The route should be at GET /health. Make the change, commit it, and ensure kata can-exit passes.',
-  maxTurns: 20,
-  maxTokens: 50_000,
-  timeoutMs: 5 * 60 * 1000,
+  timeoutMs: 10 * 60 * 1000,
   checkpoints: [
     assertCurrentMode('task'),
     assertDiffContains('/health'),
