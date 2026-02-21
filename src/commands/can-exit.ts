@@ -424,7 +424,29 @@ export async function canExit(args: string[]): Promise<void> {
   const { loadModesConfig } = await import('../config/cache.js')
   const modesConfig = await loadModesConfig()
   const modeConfig = modesConfig.modes[sessionType]
-  const stopConditions = modeConfig?.stop_conditions ?? []
+  const stopConditions = [...(modeConfig?.stop_conditions ?? [])]
+
+  // Merge template global_conditions (e.g., changes_committed, changes_pushed)
+  // Template conditions use "changes_" prefix; normalize to match check names
+  if (state.template) {
+    try {
+      const { parseTemplateYaml } = await import('./enter/template.js')
+      const { resolveTemplatePath } = await import('../session/lookup.js')
+      const fullPath = state.template.startsWith('/') ? state.template : resolveTemplatePath(state.template)
+      const templateYaml = parseTemplateYaml(fullPath)
+      if (templateYaml?.global_conditions) {
+        for (const cond of templateYaml.global_conditions) {
+          // Normalize: "changes_committed" → "committed", "changes_pushed" → "pushed"
+          const normalized = cond.replace(/^changes_/, '')
+          if (!stopConditions.includes(normalized)) {
+            stopConditions.push(normalized)
+          }
+        }
+      }
+    } catch {
+      // Template not found or parse error — don't block exit
+    }
+  }
 
   const {
     canExit: canExitNow,
