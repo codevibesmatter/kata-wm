@@ -36,21 +36,14 @@ phases:
       - id: context-search
         title: "Quick context search (3-5 min max)"
         instruction: |
-          Find relevant context fast:
+          Find relevant context fast. Search for:
+          - Files related to the task (Glob for filenames, Grep for code patterns)
+          - Existing patterns to follow (naming, structure, conventions)
+          - Rules that may apply: check `.claude/rules/` if it exists
 
-          Task(subagent_type="Explore", prompt="
-            Find code related to {task description}.
-            Search: Glob + Grep for relevant files.
-            Document: file:line references, patterns to follow.
-            Keep it brief — 3-5 findings max.
-          ", model="haiku")
+          Document 3-5 findings with file:line references.
+          Keep it brief — just enough context to plan the change.
 
-          Also check rules if relevant:
-          ```bash
-          ls .claude/rules/ | xargs grep -l "{keyword}" 2>/dev/null
-          ```
-
-          TaskOutput(task_id=..., block=true)
           Then: Mark this task completed via TaskUpdate
 
       - id: scope-and-approach
