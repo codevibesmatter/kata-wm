@@ -373,6 +373,9 @@ function writeEvidenceFile(
  * Print a human-readable step result line
  */
 function printStep(step: StepResult): void {
+  // Don't print steps that are silently skipped (command not configured)
+  if (step.skipped && !step.output) return
+
   const icon = step.skipped ? '⏭' : step.passed ? '✅' : '❌'
   const label = step.skipped ? 'SKIPPED' : step.passed ? 'PASS' : 'FAIL'
   console.log(`  ${icon} ${step.name}: ${label}`)
