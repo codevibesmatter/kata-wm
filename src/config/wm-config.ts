@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import jsYaml from 'js-yaml'
-import { findClaudeProjectDir } from '../session/lookup.js'
+import { findClaudeProjectDir, getUserConfigDir } from '../session/lookup.js'
 
 export interface WmConfig {
   // Project profile
@@ -62,41 +62,94 @@ export function getDefaultConfig(): Required<
 }
 
 /**
- * Load wm.yaml config from .claude/workflows/wm.yaml
- * Resolves from project root (findClaudeProjectDir) for reliability across subdirectories
- * Falls back to defaults for any missing fields
+ * Parse a single wm.yaml file, returning null if missing or invalid.
  */
-export function loadWmConfig(): WmConfig {
-  const defaults = getDefaultConfig()
-
-  let projectRoot: string
-  try {
-    projectRoot = findClaudeProjectDir()
-  } catch {
-    return defaults
-  }
-  const configPath = join(projectRoot, '.claude', 'workflows', 'wm.yaml')
-
-  if (!existsSync(configPath)) {
-    return defaults
-  }
-
+function parseWmYaml(configPath: string): WmConfig | null {
+  if (!existsSync(configPath)) return null
   try {
     const raw = readFileSync(configPath, 'utf-8')
     const parsed = jsYaml.load(raw, { schema: jsYaml.CORE_SCHEMA }) as WmConfig | null
-    if (!parsed || typeof parsed !== 'object') {
-      return defaults
-    }
-    // Merge with defaults (defaults for missing fields)
-    return {
-      ...defaults,
-      ...parsed,
-      reviews: {
-        ...defaults.reviews,
-        ...(parsed.reviews ?? {}),
-      },
-    }
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed
   } catch {
-    return defaults
+    return null
   }
+}
+
+/**
+ * Merge a WmConfig overlay onto a base config.
+ * Rules (per spec B5):
+ * - Scalar fields: later layer wins (null counts as "set")
+ * - reviews, providers: shallow merge per key
+ * - project: only from project layer (caller controls this)
+ * - prime_extensions: later layer replaces entirely
+ * - mode_config: shallow merge per mode key
+ */
+function mergeWmConfig(base: WmConfig, overlay: WmConfig, skipProject = false): WmConfig {
+  const merged: WmConfig = { ...base }
+
+  // Scalar overrides
+  if (overlay.spec_path !== undefined) merged.spec_path = overlay.spec_path
+  if (overlay.research_path !== undefined) merged.research_path = overlay.research_path
+  if (overlay.session_retention_days !== undefined)
+    merged.session_retention_days = overlay.session_retention_days
+  if (overlay.hooks_dir !== undefined) merged.hooks_dir = overlay.hooks_dir
+  if (overlay.wm_version !== undefined) merged.wm_version = overlay.wm_version
+  if (overlay.verify_command !== undefined) merged.verify_command = overlay.verify_command
+
+  // Arrays: replace entirely
+  if (overlay.prime_extensions !== undefined) merged.prime_extensions = overlay.prime_extensions
+
+  // Nested objects: shallow merge
+  if (overlay.reviews !== undefined) {
+    merged.reviews = { ...merged.reviews, ...overlay.reviews }
+  }
+  if (overlay.providers !== undefined) {
+    merged.providers = { ...merged.providers, ...overlay.providers }
+  }
+  if (overlay.mode_config !== undefined) {
+    merged.mode_config = { ...merged.mode_config, ...overlay.mode_config }
+  }
+
+  // project: only from project layer
+  if (!skipProject && overlay.project !== undefined) {
+    merged.project = overlay.project
+  }
+
+  return merged
+}
+
+/**
+ * Load wm.yaml config with 3-tier merge.
+ * Merge order (lowest to highest priority):
+ *   hardcoded defaults → user ~/.config/kata/wm.yaml → project .claude/workflows/wm.yaml
+ *
+ * The user-level `project` key is ignored (project identity is per-project).
+ */
+export function loadWmConfig(): WmConfig {
+  let merged: WmConfig = getDefaultConfig()
+
+  // 1. User-level wm.yaml
+  const userConfigPath = join(getUserConfigDir(), 'wm.yaml')
+  const userConfig = parseWmYaml(userConfigPath)
+  if (userConfig) {
+    merged = mergeWmConfig(merged, userConfig, true) // skipProject=true for user layer
+  }
+
+  // 2. Project-level wm.yaml (highest priority)
+  let projectRoot: string | null = null
+  try {
+    projectRoot = findClaudeProjectDir()
+  } catch {
+    // No Claude project dir
+  }
+  if (projectRoot) {
+    const projectConfigPath = join(projectRoot, '.claude', 'workflows', 'wm.yaml')
+    const projectConfig = parseWmYaml(projectConfigPath)
+    if (projectConfig) {
+      merged = mergeWmConfig(merged, projectConfig, false) // skipProject=false for project layer
+    }
+  }
+
+  return merged
 }
