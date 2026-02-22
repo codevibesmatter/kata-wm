@@ -11,53 +11,70 @@ let cachedInstance: ModesConfig | null = null
 let cachedKey: string | null = null
 
 /**
- * Load and cache modes.yaml config with project-level override support
+ * Shallow-merge an overlay config onto a base config.
+ * Each mode key from overlay FULLY replaces the base entry (no deep merge within a mode).
+ * Top-level arrays (categories, red_flags, global_behavior) are replaced when present.
+ */
+function mergeModesConfig(base: ModesConfig, overlay: ModesConfig): ModesConfig {
+  return {
+    ...base,
+    modes: {
+      ...base.modes,
+      ...overlay.modes,
+    },
+    ...(overlay.categories !== undefined && { categories: overlay.categories }),
+    ...(overlay.red_flags !== undefined && { red_flags: overlay.red_flags }),
+    ...(overlay.global_behavior !== undefined && {
+      global_behavior: overlay.global_behavior,
+    }),
+  }
+}
+
+/**
+ * Load and cache modes.yaml config with 3-tier merge support.
+ * Merge order (lowest to highest priority): package → user → project.
+ * Each layer's mode keys fully replace matching keys from lower layers.
+ *
  * If yamlPath is provided, uses it as the package-level config path.
- * Otherwise, uses getModesYamlPath() to find the package-level config.
- * If a project-level modes.yaml exists, performs a shallow merge where
- * each top-level mode key from the project FULLY replaces the package entry.
+ * Otherwise, uses getModesYamlPath() to find paths at all tiers.
  * Returns cached instance if already loaded for the same paths.
  */
 export async function loadModesConfig(yamlPath?: string): Promise<ModesConfig> {
   const paths = getModesYamlPath()
   const effectivePath = yamlPath ?? paths.packagePath
-  const cacheKey = `${effectivePath}:${paths.projectPath ?? ''}`
+  const cacheKey = `${effectivePath}:${paths.userPath ?? ''}:${paths.projectPath ?? ''}`
 
   if (!cachedInstance || cachedKey !== cacheKey) {
-    // Load package-level config
-    const packageConfig = await parseModesConfig(effectivePath)
+    // Load package-level config (always present)
+    let merged = await parseModesConfig(effectivePath)
 
-    // Load and merge project-level config if it exists
+    // Merge user-level config if it exists
+    if (paths.userPath) {
+      try {
+        const userConfig = await parseModesConfig(paths.userPath)
+        merged = mergeModesConfig(merged, userConfig)
+      } catch (err) {
+        // biome-ignore lint/suspicious/noConsole: surface config parse errors to user
+        console.warn(
+          `⚠️  Warning: Failed to parse user modes.yaml at ${paths.userPath}: ${err instanceof Error ? err.message : err}`,
+        )
+      }
+    }
+
+    // Merge project-level config if it exists (highest priority)
     if (paths.projectPath) {
       try {
         const projectConfig = await parseModesConfig(paths.projectPath)
-        // Shallow merge: project fully overrides package at each top-level key
-        // modes: each mode key from project FULLY replaces the package entry (no deep merge within a mode)
-        // categories, red_flags, global_behavior: project values replace package values when present
-        cachedInstance = {
-          ...packageConfig,
-          modes: {
-            ...packageConfig.modes,
-            ...projectConfig.modes,
-          },
-          ...(projectConfig.categories !== undefined && { categories: projectConfig.categories }),
-          ...(projectConfig.red_flags !== undefined && { red_flags: projectConfig.red_flags }),
-          ...(projectConfig.global_behavior !== undefined && {
-            global_behavior: projectConfig.global_behavior,
-          }),
-        }
+        merged = mergeModesConfig(merged, projectConfig)
       } catch (err) {
         // biome-ignore lint/suspicious/noConsole: surface config parse errors to user
         console.warn(
           `⚠️  Warning: Failed to parse project modes.yaml at ${paths.projectPath}: ${err instanceof Error ? err.message : err}`,
         )
-        // biome-ignore lint/suspicious/noConsole: surface config parse errors to user
-        console.warn('   Falling back to built-in modes.yaml')
-        cachedInstance = packageConfig
       }
-    } else {
-      cachedInstance = packageConfig
     }
+
+    cachedInstance = merged
     cachedKey = cacheKey
   }
 

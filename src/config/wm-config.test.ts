@@ -39,6 +39,7 @@ describe('getDefaultConfig', () => {
 describe('loadWmConfig', () => {
   let tmpDir: string
   const origEnv = process.env.CLAUDE_PROJECT_DIR
+  const origXdg = process.env.XDG_CONFIG_HOME
 
   beforeEach(() => {
     tmpDir = makeTmpDir()
@@ -47,6 +48,8 @@ describe('loadWmConfig', () => {
     mkdirSync(join(tmpDir, '.claude', 'workflows'), { recursive: true })
     // Set env var to point to our temp dir
     process.env.CLAUDE_PROJECT_DIR = tmpDir
+    // Point XDG to nonexistent dir to avoid user config interference
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'no-user-config')
   })
 
   afterEach(() => {
@@ -55,6 +58,11 @@ describe('loadWmConfig', () => {
       process.env.CLAUDE_PROJECT_DIR = origEnv
     } else {
       delete process.env.CLAUDE_PROJECT_DIR
+    }
+    if (origXdg !== undefined) {
+      process.env.XDG_CONFIG_HOME = origXdg
+    } else {
+      delete process.env.XDG_CONFIG_HOME
     }
   })
 
@@ -153,5 +161,149 @@ describe('loadWmConfig', () => {
     const config = loadWmConfig()
     expect(config.spec_path).toBe('planning/specs')
     expect(config.session_retention_days).toBe(7)
+  })
+})
+
+describe('loadWmConfig 3-tier merge', () => {
+  let tmpDir: string
+  const origEnv = process.env.CLAUDE_PROJECT_DIR
+  const origXdg = process.env.XDG_CONFIG_HOME
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir()
+    mkdirSync(join(tmpDir, '.claude', 'sessions'), { recursive: true })
+    mkdirSync(join(tmpDir, '.claude', 'workflows'), { recursive: true })
+    process.env.CLAUDE_PROJECT_DIR = tmpDir
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+    if (origEnv !== undefined) {
+      process.env.CLAUDE_PROJECT_DIR = origEnv
+    } else {
+      delete process.env.CLAUDE_PROJECT_DIR
+    }
+    if (origXdg !== undefined) {
+      process.env.XDG_CONFIG_HOME = origXdg
+    } else {
+      delete process.env.XDG_CONFIG_HOME
+    }
+  })
+
+  it('user wm.yaml overrides defaults', () => {
+    // Create user wm.yaml
+    const userDir = join(tmpDir, 'user-config', 'kata')
+    mkdirSync(userDir, { recursive: true })
+    writeFileSync(join(userDir, 'wm.yaml'), jsYaml.dump({
+      session_retention_days: 30,
+    }))
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'user-config')
+
+    const config = loadWmConfig()
+    expect(config.session_retention_days).toBe(30)
+    // Other defaults still present
+    expect(config.spec_path).toBe('planning/specs')
+  })
+
+  it('project wm.yaml overrides user wm.yaml', () => {
+    // User sets retention to 30
+    const userDir = join(tmpDir, 'user-config', 'kata')
+    mkdirSync(userDir, { recursive: true })
+    writeFileSync(join(userDir, 'wm.yaml'), jsYaml.dump({
+      session_retention_days: 30,
+      spec_path: 'user/specs',
+    }))
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'user-config')
+
+    // Project sets retention to 14
+    writeFileSync(join(tmpDir, '.claude', 'workflows', 'wm.yaml'), jsYaml.dump({
+      session_retention_days: 14,
+    }))
+
+    const config = loadWmConfig()
+    // Project wins for retention
+    expect(config.session_retention_days).toBe(14)
+    // User wins for spec_path (not overridden by project)
+    expect(config.spec_path).toBe('user/specs')
+  })
+
+  it('user project key is ignored', () => {
+    const userDir = join(tmpDir, 'user-config', 'kata')
+    mkdirSync(userDir, { recursive: true })
+    writeFileSync(join(userDir, 'wm.yaml'), jsYaml.dump({
+      project: {
+        name: 'user-project-name',
+        test_command: 'user-test',
+      },
+    }))
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'user-config')
+
+    const config = loadWmConfig()
+    // User project key should be ignored
+    expect(config.project).toBeUndefined()
+  })
+
+  it('project project key is preserved', () => {
+    const userDir = join(tmpDir, 'user-config', 'kata')
+    mkdirSync(userDir, { recursive: true })
+    writeFileSync(join(userDir, 'wm.yaml'), jsYaml.dump({
+      project: { name: 'user-name' },
+    }))
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'user-config')
+
+    writeFileSync(join(tmpDir, '.claude', 'workflows', 'wm.yaml'), jsYaml.dump({
+      project: { name: 'project-name', test_command: 'npm test' },
+    }))
+
+    const config = loadWmConfig()
+    expect(config.project!.name).toBe('project-name')
+    expect(config.project!.test_command).toBe('npm test')
+  })
+
+  it('reviews section shallow merges across tiers', () => {
+    const userDir = join(tmpDir, 'user-config', 'kata')
+    mkdirSync(userDir, { recursive: true })
+    writeFileSync(join(userDir, 'wm.yaml'), jsYaml.dump({
+      reviews: { code_reviewer: 'gemini' },
+    }))
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'user-config')
+
+    // Project overrides spec_review but not code_reviewer
+    writeFileSync(join(tmpDir, '.claude', 'workflows', 'wm.yaml'), jsYaml.dump({
+      reviews: { spec_review: true },
+    }))
+
+    const config = loadWmConfig()
+    expect(config.reviews!.code_reviewer).toBe('gemini') // from user
+    expect(config.reviews!.spec_review).toBe(true) // from project
+  })
+
+  it('prime_extensions array replaces entirely', () => {
+    const userDir = join(tmpDir, 'user-config', 'kata')
+    mkdirSync(userDir, { recursive: true })
+    writeFileSync(join(userDir, 'wm.yaml'), jsYaml.dump({
+      prime_extensions: ['user-ext-1', 'user-ext-2'],
+    }))
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'user-config')
+
+    // Project replaces entirely
+    writeFileSync(join(tmpDir, '.claude', 'workflows', 'wm.yaml'), jsYaml.dump({
+      prime_extensions: ['project-ext'],
+    }))
+
+    const config = loadWmConfig()
+    expect(config.prime_extensions).toEqual(['project-ext'])
+  })
+
+  it('handles missing user config dir gracefully', () => {
+    process.env.XDG_CONFIG_HOME = join(tmpDir, 'nonexistent')
+
+    writeFileSync(join(tmpDir, '.claude', 'workflows', 'wm.yaml'), jsYaml.dump({
+      spec_path: 'custom/specs',
+    }))
+
+    const config = loadWmConfig()
+    expect(config.spec_path).toBe('custom/specs')
+    expect(config.session_retention_days).toBe(7) // default
   })
 })

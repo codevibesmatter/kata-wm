@@ -25,6 +25,7 @@ import { setup } from './commands/setup.js'
 import { teardown } from './commands/teardown.js'
 import { hook } from './commands/hook.js'
 import { batteries } from './commands/batteries.js'
+import { config as configCommand } from './commands/config.js'
 import { modes } from './commands/modes.js'
 import { verifyPhase } from './commands/verify-phase.js'
 import { providers as providersCommand } from './commands/providers.js'
@@ -138,6 +139,10 @@ async function main() {
         await batteries(commandArgs)
         break
 
+      case 'config':
+        await configCommand(commandArgs)
+        break
+
       case 'modes':
         await modes(commandArgs)
         break
@@ -207,7 +212,8 @@ Usage:
   kata suggest <message>                         Detect mode from message, output guidance
   kata doctor [--fix] [--json]                   Diagnose and fix session state
   kata setup [--yes] [--strict] [--batteries]    Setup kata in a project
-  kata batteries [--update] [--cwd=PATH]         Scaffold batteries-included starter content
+  kata batteries [--update] [--cwd=PATH] [--user] Scaffold batteries-included starter content
+  kata config [--show]                            Show resolved config with provenance
   kata providers [list|setup] [--json]             Check/configure agent providers
   kata teardown [--yes] [--all] [--dry-run]      Remove kata from a project
   kata hook <name>                               Dispatch hook event (for settings.json)
@@ -230,6 +236,7 @@ Setup:
   kata enter onboard                Guided setup interview (interactive, agent-driven)
   kata batteries                  Scaffold batteries content only (idempotent, skips existing)
   kata batteries --update         Re-scaffold batteries, overwriting with latest versions
+  kata batteries --user           Seed user-level templates at ~/.config/kata/
   kata teardown --yes             Remove kata hooks and config
   kata teardown --dry-run         Preview what would be removed
 

@@ -1,8 +1,8 @@
-// scaffold-batteries.ts — copy batteries-included content to a project
+// scaffold-batteries.ts — copy batteries-included content to a project or user config dir
 // Called by `wm setup --batteries` after base setup completes.
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { getPackageRoot } from '../session/lookup.js'
+import { getPackageRoot, getUserConfigDir } from '../session/lookup.js'
 
 export interface BatteriesResult {
   templates: string[]
@@ -129,6 +129,57 @@ export function scaffoldBatteries(projectRoot: string, update = false): Batterie
       result.githubTemplates.push('wm-labels.json')
     }
   }
+
+  return result
+}
+
+export interface UserBatteriesResult {
+  templates: string[]
+  specTemplates: string[]
+  skipped: string[]
+  updated: string[]
+}
+
+/**
+ * Scaffold batteries content into the user config directory (~/.config/kata/).
+ * Only copies templates and spec-templates (not agents or GitHub templates,
+ * which are project-specific).
+ *
+ * Path mapping:
+ *   batteries/templates/      → ~/.config/kata/templates/
+ *   batteries/spec-templates/ → ~/.config/kata/spec-templates/
+ *
+ * @param update - When true, overwrite existing files instead of skipping them
+ */
+export function scaffoldUserBatteries(update = false): UserBatteriesResult {
+  const batteryRoot = join(getPackageRoot(), 'batteries')
+  const userDir = getUserConfigDir()
+  const result: UserBatteriesResult = {
+    templates: [],
+    specTemplates: [],
+    skipped: [],
+    updated: [],
+  }
+
+  // Mode templates → ~/.config/kata/templates/
+  copyDirectory(
+    join(batteryRoot, 'templates'),
+    join(userDir, 'templates'),
+    result.templates,
+    result.skipped,
+    result.updated,
+    update,
+  )
+
+  // Spec templates → ~/.config/kata/spec-templates/
+  copyDirectory(
+    join(batteryRoot, 'spec-templates'),
+    join(userDir, 'spec-templates'),
+    result.specTemplates,
+    result.skipped,
+    result.updated,
+    update,
+  )
 
   return result
 }
