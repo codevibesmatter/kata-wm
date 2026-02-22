@@ -4,6 +4,9 @@
  * Quick eval: does the inner agent enter a mode in the CORRECT project?
  * Stops after a few turns — just enough to verify session isolation.
  *
+ * These assertions are isolation-specific and intentionally inline —
+ * they test harness mechanics (session isolation), not workflow outcomes.
+ *
  * Asserts:
  * 1. Session state.json exists in the eval project (not parent)
  * 2. Mode is research (not default)

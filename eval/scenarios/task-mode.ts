@@ -12,27 +12,17 @@
  */
 
 import type { EvalScenario } from '../harness.js'
-import {
-  assertCurrentMode,
-  assertNewCommit,
-  assertCleanWorkingTree,
-  assertDiffContains,
-  assertCanExit,
-} from '../assertions.js'
+import { workflowPresets, assertDiffContains } from '../assertions.js'
 
 export const taskModeScenario: EvalScenario = {
   id: 'task-mode',
   name: 'Task mode: add /health route',
   templatePath: '.claude/workflows/templates/task.md',
   prompt:
-    'Add a `/health` route to the web app that returns `{"status": "ok"}` with HTTP 200. ' +
-    'The route should be at GET /health. Make the change, commit it, and ensure kata can-exit passes.',
+    'Add a `/health` route to the web app that returns `{"status": "ok"}` with HTTP 200.',
   timeoutMs: 10 * 60 * 1000,
   checkpoints: [
-    assertCurrentMode('task'),
+    ...workflowPresets('task'),
     assertDiffContains('/health'),
-    assertNewCommit(),
-    assertCleanWorkingTree(),
-    assertCanExit(),
   ],
 }

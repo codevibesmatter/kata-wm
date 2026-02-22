@@ -5,99 +5,24 @@
  *
  * Asserts:
  * 1. Claude enters planning mode (currentMode: planning)
- * 2. A spec file is created at planning/specs/*.md
+ * 2. A spec file is created at the configured spec_path
  * 3. Spec frontmatter has status: approved
  * 4. Spec body includes at least one behavior section (### B1:)
- * 5. Spec is committed (at least one commit beyond fixture)
- * 6. All planning phases appear in completedPhases
+ * 5. Spec is committed
+ * 6. Planning mode appears in session history
  */
 
 import type { EvalScenario } from '../harness.js'
-import type { EvalContext } from '../harness.js'
-import {
-  assertCurrentMode,
-  assertNewCommit,
-} from '../assertions.js'
-
-function assertSpecFileCreated(): import('../harness.js').EvalCheckpoint {
-  return {
-    name: 'spec file created at planning/specs/',
-    assert(ctx: EvalContext) {
-      const files = ctx.listDir('planning/specs')
-      const specFiles = files.filter((f) => f.endsWith('.md'))
-      if (specFiles.length === 0) {
-        return 'No spec files found in planning/specs/'
-      }
-      return null
-    },
-  }
-}
-
-function assertSpecApproved(): import('../harness.js').EvalCheckpoint {
-  return {
-    name: 'spec frontmatter: status: approved',
-    assert(ctx: EvalContext) {
-      const files = ctx.listDir('planning/specs')
-      const specFiles = files.filter((f) => f.endsWith('.md'))
-      if (specFiles.length === 0) return 'No spec files to check'
-
-      for (const file of specFiles) {
-        const content = ctx.readFile(`planning/specs/${file}`)
-        if (content.includes('status: approved')) return null
-      }
-      return 'No spec file with status: approved found'
-    },
-  }
-}
-
-function assertSpecHasBehaviors(): import('../harness.js').EvalCheckpoint {
-  return {
-    name: 'spec contains behavior sections (### B1:)',
-    assert(ctx: EvalContext) {
-      const files = ctx.listDir('planning/specs')
-      const specFiles = files.filter((f) => f.endsWith('.md'))
-      if (specFiles.length === 0) return 'No spec files to check'
-
-      for (const file of specFiles) {
-        const content = ctx.readFile(`planning/specs/${file}`)
-        if (/###\s+B\d+:/m.test(content)) return null
-      }
-      return 'No behavior sections (### B1:) found in spec'
-    },
-  }
-}
-
-function assertPlanningPhasesComplete(): import('../harness.js').EvalCheckpoint {
-  return {
-    name: 'planning phases complete in session state',
-    assert(ctx: EvalContext) {
-      const state = ctx.getSessionState()
-      if (!state) return 'Session state not found'
-      // Planning mode should have at least visited planning mode
-      const hasPlanning = state.modeHistory?.some((h) => h.mode === 'planning')
-      if (!hasPlanning) {
-        return `Planning mode not found in history: ${JSON.stringify(state.modeHistory)}`
-      }
-      return null
-    },
-  }
-}
+import { planningPresets } from '../assertions.js'
 
 export const planningModeScenario: EvalScenario = {
   id: 'planning-mode',
   name: 'Planning mode: user authentication feature spec',
   templatePath: '.claude/workflows/templates/planning.md',
   prompt:
-    'Use kata planning to design a user authentication feature for this web app. ' +
+    'Plan a user authentication feature for this web app. ' +
     'The feature should cover JWT-based auth with login and protected routes. ' +
     'Produce an approved spec and commit it.',
   timeoutMs: 15 * 60 * 1000,
-  checkpoints: [
-    assertCurrentMode('planning'),
-    assertSpecFileCreated(),
-    assertSpecApproved(),
-    assertSpecHasBehaviors(),
-    assertNewCommit(),
-    assertPlanningPhasesComplete(),
-  ],
+  checkpoints: planningPresets(),
 }

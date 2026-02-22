@@ -157,6 +157,17 @@ export async function runScenario(
     projectDir = join(EVAL_PROJECTS_DIR, `${scenario.id}-${ts}`)
     mkdirSync(projectDir, { recursive: true })
     cpSync(fixturePath, projectDir, { recursive: true })
+    // Refresh templates with latest batteries so fixtures never go stale
+    try {
+      execSync(`kata batteries --update --cwd="${projectDir}"`, {
+        cwd: projectDir,
+        env: { ...process.env, CLAUDE_PROJECT_DIR: projectDir },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      })
+    } catch (err) {
+      const msg = (err as { stderr?: Buffer }).stderr?.toString() ?? String(err)
+      throw new Error(`kata batteries --update failed for fixture '${fixtureName}': ${msg}`)
+    }
     // Initialize git repo so the inner agent has a working git context
     execSync(
       'git init -b main && ' +
