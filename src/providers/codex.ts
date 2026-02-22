@@ -23,7 +23,7 @@ export const codexProvider: AgentProvider = {
       '--json',
       '--skip-git-repo-check',
       '--cd', options.cwd,
-      '-c', `model="${model}"`,
+      '-m', model,
       '-',  // read prompt from stdin
     ]
 
