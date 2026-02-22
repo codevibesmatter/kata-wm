@@ -21,9 +21,10 @@ export const codexProvider: AgentProvider = {
       'exec',
       '--dangerously-bypass-approvals-and-sandbox',
       '--json',
+      '--ephemeral',
       '--skip-git-repo-check',
       '--cd', options.cwd,
-      '-m', model,
+      '--model', model,
       '-',  // read prompt from stdin
     ]
 
