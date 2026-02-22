@@ -22,6 +22,12 @@ phases:
       - "Implement Codex provider (CLI wrapper with JSONL parsing)"
       - "Add model selection per provider"
   - id: p3
+    name: "Provider setup command and onboard integration"
+    tasks:
+      - "Implement kata providers setup/list commands"
+      - "Add providers: section to WmConfig schema"
+      - "Update onboard template with provider detection step"
+  - id: p4
     name: "Eval + workflow integration"
     tasks:
       - "Refactor eval judge to consume AgentProvider"
@@ -274,6 +280,92 @@ N/A.
 
 ---
 
+### B8: Provider setup command and onboard integration
+
+**Core:**
+- **ID:** provider-setup
+- **Trigger:** `kata providers setup` command, or onboard template p3 (custom path) asking about external reviewers
+- **Expected:** A `kata providers setup` command that: (1) checks which agent CLIs are installed (`claude`, `gemini`, `codex`) and reports status, (2) for missing CLIs, prints install commands, (3) checks for required API key env vars (`ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` / `GEMINI_API_KEY`, `OPENAI_API_KEY`), (4) writes provider config to `wm.yaml` under a `providers:` key with the default provider and any available providers. The onboard template's p3 external review question integrates with this — when user picks a reviewer, run `kata providers setup` to verify the CLI is available.
+- **Verify:** `kata providers setup` reports status for all three CLIs; onboard custom path runs setup when reviewer selected
+
+#### UI Layer
+```
+$ kata providers setup
+
+Agent Providers
+───────────────────────────────────────
+  claude   ✅ installed    API key: ✅ set
+  gemini   ✅ installed    API key: ✅ set
+  codex    ❌ not found    Install: npm i -g @openai/codex
+
+Default provider: claude
+
+To install missing providers:
+  npm i -g @openai/codex
+
+Wrote providers config to .claude/workflows/wm.yaml
+```
+
+Also supports `kata providers list` to show available providers without modifying config.
+
+#### API Layer
+```typescript
+// src/commands/providers.ts
+
+interface ProviderStatus {
+  name: string
+  installed: boolean
+  apiKeySet: boolean
+  apiKeyEnvVar: string
+  installCommand: string
+}
+
+export async function checkProviders(): Promise<ProviderStatus[]>
+export async function setupProviders(opts: { write: boolean }): Promise<void>
+```
+
+wm.yaml config addition:
+```yaml
+providers:
+  default: claude
+  available:
+    - claude
+    - gemini
+  judge_provider: claude     # used by eval --judge when no explicit provider given
+  judge_model: null           # override per-provider default model for judging
+```
+
+#### Data Layer
+New `providers:` section in `WmConfig` schema (`src/config/wm-config.ts`). Optional — projects without it default to `claude` only.
+
+---
+
+### B9: Onboard template provider step
+
+**Core:**
+- **ID:** onboard-provider-step
+- **Trigger:** Onboard template p3 (custom path), or after p1 quick path as an optional step
+- **Expected:** The onboard template's external review question (currently in p3) is updated to: (1) run `kata providers setup` to detect available CLIs, (2) only offer providers whose CLI is installed, (3) write the selected reviewer to `wm.yaml` `providers.default`. For quick path, provider setup runs automatically with detected defaults (no question needed — just report what's available).
+- **Verify:** Onboard custom path shows only installed providers as options; quick path auto-detects and writes config
+
+#### UI Layer
+During onboard custom path (p3):
+```
+AskUserQuestion: Which agent providers do you want to use?
+  1. Claude only (already available)
+  2. Claude + Gemini (both detected)
+  3. Claude + Gemini + Codex (codex not installed — will guide setup)
+  4. Skip provider setup
+```
+
+#### API Layer
+Updates to `templates/onboard.md` phase p3 tasks and the External Review Setup section.
+
+#### Data Layer
+N/A — uses the same `providers:` config from B8.
+
+---
+
 ## Non-Goals
 
 - No web API or HTTP provider support — CLI agents only
@@ -336,7 +428,33 @@ Verification:
 - Each provider satisfies the interface
 - Types compile (`npm run typecheck`)
 
-### Phase 3: Eval + workflow integration
+### Phase 3: Provider setup command and onboard integration
+
+Tasks:
+- Implement `kata providers setup` — check CLI availability (`which gemini`, `which codex`), check API key env vars, report status table
+- Implement `kata providers list` — show available providers and their status (no writes)
+- Add `providers:` section to `WmConfigSchema` in `src/config/wm-config.ts` — `default`, `available[]`, `judge_provider`, `judge_model`
+- Wire `providers` subcommand in `src/index.ts` CLI dispatcher
+- Update onboard template `templates/onboard.md` — p3 external review question runs `kata providers setup` to detect available CLIs, only offers installed providers as options
+- Quick-path onboard (p1 → p5): auto-detect providers, write available ones to config without prompting
+
+test_cases:
+- id: tc1
+  description: "kata providers list shows status"
+  command: "kata providers list"
+  expected_exit: 0
+- id: tc2
+  description: "TypeScript compiles"
+  command: "npm run typecheck"
+  expected_exit: 0
+
+Verification:
+- `kata providers setup` detects installed CLIs and writes config
+- `kata providers list` shows status without modifying anything
+- Onboard template references provider setup
+- Types compile (`npm run typecheck`)
+
+### Phase 4: Eval + workflow integration
 
 Tasks:
 - Refactor `eval/judge.ts` to consume `AgentProvider` via `getProvider()` instead of inline Claude SDK calls
