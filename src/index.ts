@@ -27,6 +27,7 @@ import { hook } from './commands/hook.js'
 import { batteries } from './commands/batteries.js'
 import { modes } from './commands/modes.js'
 import { verifyPhase } from './commands/verify-phase.js'
+import { providers as providersCommand } from './commands/providers.js'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getPackageRoot } from './session/lookup.js'
@@ -145,6 +146,10 @@ async function main() {
         await verifyPhase(commandArgs)
         break
 
+      case 'providers':
+        await providersCommand(commandArgs)
+        break
+
       case 'hook':
         await hook(commandArgs)
         break
@@ -203,6 +208,7 @@ Usage:
   kata doctor [--fix] [--json]                   Diagnose and fix session state
   kata setup [--yes] [--strict] [--batteries]    Setup kata in a project
   kata batteries [--update] [--cwd=PATH]         Scaffold batteries-included starter content
+  kata providers [list|setup] [--json]             Check/configure agent providers
   kata teardown [--yes] [--all] [--dry-run]      Remove kata from a project
   kata hook <name>                               Dispatch hook event (for settings.json)
   kata --version                                 Show version
@@ -289,3 +295,18 @@ export * from './config/parser.js'
 export * from './config/cache.js'
 export * from './session/lookup.js'
 export * from './validation/index.js'
+
+// Agent providers
+export {
+  getProvider,
+  registerProvider,
+  listProviders,
+  preparePrompt,
+  loadPrompt,
+  listPrompts,
+  claudeProvider,
+  geminiProvider,
+  codexProvider,
+} from './providers/index.js'
+export type { AgentProvider, AgentRunOptions } from './providers/types.js'
+export type { PreparedPrompt } from './providers/prompt.js'

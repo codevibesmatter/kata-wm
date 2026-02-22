@@ -10,7 +10,10 @@
  *   npm run eval -- --json                    # JSON output
  *   npm run eval -- --list                    # List available scenarios
  *   npm run eval -- --verbose                 # Stream agent output in real time
- *   npm run eval -- --judge                   # Run LLM-as-judge on transcripts
+ *   npm run eval -- --judge                   # Run LLM-as-judge (default: claude)
+ *   npm run eval -- --judge=gemini            # Judge with Gemini provider
+ *   npm run eval -- --judge=codex             # Judge with Codex provider
+ *   npm run eval -- --judge --judge-model=o3  # Override model for judge
  *   npm run eval -- --no-transcript           # Skip writing transcript files
  */
 
@@ -42,7 +45,11 @@ const jsonMode = args.includes('--json')
 const listMode = args.includes('--list')
 const verbose = args.includes('--verbose')
 const noTranscript = args.includes('--no-transcript')
-const judgeMode = args.includes('--judge')
+// --judge or --judge=<provider> (not matching --judge-model)
+const judgeArg = args.find((a) => a === '--judge' || (a.startsWith('--judge=') && !a.startsWith('--judge-')))
+const judgeMode = !!judgeArg
+const judgeProvider = judgeArg?.includes('=') ? judgeArg.split('=')[1] : 'claude'
+const judgeModel = args.find((a) => a.startsWith('--judge-model='))?.split('=')[1]
 const scenarioArg = args.find((a) => a.startsWith('--scenario='))?.split('=')[1]
 const projectArg = args.find((a) => a.startsWith('--project='))?.split('=')[1]
 const resumeArg = args.find((a) => a.startsWith('--resume='))?.split('=')[1]
@@ -93,6 +100,8 @@ async function main(): Promise<void> {
       resumeSessionId: resumeArg,
       resumeAnswer: answerArg,
       judge: judgeMode,
+      judgeProvider,
+      judgeModel,
     })
     results.push(result)
 
@@ -139,6 +148,8 @@ async function main(): Promise<void> {
         verbose: verbose && !jsonMode,
         transcriptPath,
         judge: judgeMode,
+        judgeProvider,
+        judgeModel,
       })
       results.push(result)
 
@@ -196,7 +207,8 @@ function printResult(result: EvalResult): void {
 
   if (result.judgeResult) {
     const j = result.judgeResult
-    console.log(`\n  Judge: Agent ${j.agentScore}/100 | System ${j.systemScore}/100 | ${j.verdict}`)
+    const pLabel = j.provider ? ` [${j.provider}]` : ''
+    console.log(`\n  Judge${pLabel}: Agent ${j.agentScore}/100 | System ${j.systemScore}/100 | ${j.verdict}`)
     if (result.judgeReviewPath) {
       console.log(`  Review: ${result.judgeReviewPath}`)
     }

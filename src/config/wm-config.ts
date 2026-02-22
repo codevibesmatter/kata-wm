@@ -28,6 +28,13 @@ export interface WmConfig {
   }
   // Mode configuration (project overrides per mode)
   mode_config?: Record<string, unknown>
+  // Agent provider configuration
+  providers?: {
+    default?: string              // default provider name (e.g., 'claude')
+    available?: string[]          // detected available providers
+    judge_provider?: string       // provider for eval --judge (default: same as default)
+    judge_model?: string | null   // override model for judging
+  }
   // Extensions
   prime_extensions?: string[]
   // Version tracking

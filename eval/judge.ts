@@ -1,16 +1,18 @@
 /**
  * LLM-as-judge for eval transcripts.
  *
- * Feeds the transcript + template + enter output to a Claude agent via
- * the Agent SDK's query(). The agent writes a free-form pipeline audit.
+ * Feeds the transcript + template + enter output to an agent provider.
+ * The agent writes a free-form pipeline audit.
  * We extract three values: agent score, system score, verdict.
  * The full review is saved as markdown.
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import type { AgentProvider } from '../src/providers/types.js'
+import { getProvider } from '../src/providers/index.js'
+import { loadPrompt } from '../src/providers/prompt.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -23,6 +25,8 @@ export interface JudgeResult {
   systemScore: number
   verdict: Verdict
   review: string
+  provider?: string
+  model?: string
 }
 
 export interface JudgeOptions {
@@ -30,16 +34,25 @@ export interface JudgeOptions {
   templatePath: string
   enterOutput?: string
   maxTranscriptLines?: number
+  /** Provider name (default: 'claude') */
+  providerName?: string
+  /** Override model for the provider */
+  model?: string
 }
 
 // ─── Prompt Construction ─────────────────────────────────────────────────────
 
 function loadReviewPrompt(): string {
-  const promptPath = join(__dirname, 'prompts', 'transcript-review.md')
-  if (!existsSync(promptPath)) {
-    throw new Error(`Review prompt not found: ${promptPath}`)
+  // Try saved prompt from providers/prompts/ first, fall back to local
+  try {
+    return loadPrompt('transcript-review')
+  } catch {
+    const promptPath = join(__dirname, 'prompts', 'transcript-review.md')
+    if (!existsSync(promptPath)) {
+      throw new Error(`Review prompt not found: ${promptPath}`)
+    }
+    return readFileSync(promptPath, 'utf-8')
   }
-  return readFileSync(promptPath, 'utf-8')
 }
 
 function summarizeTranscript(transcriptPath: string, maxLines: number): string {
@@ -132,12 +145,12 @@ VERDICT: {PASS|FAIL_AGENT|FAIL_SYSTEM|FAIL_BOTH}`
 
 // ─── Response Parsing (minimal) ──────────────────────────────────────────────
 
-function extractScore(text: string, label: string): number {
+export function extractScore(text: string, label: string): number {
   const match = text.match(new RegExp(`${label}:\\s*(\\d+)/100`))
   return match ? parseInt(match[1], 10) : 0
 }
 
-function extractVerdict(text: string): Verdict {
+export function extractVerdict(text: string): Verdict {
   const match = text.match(/VERDICT:\s*(PASS|FAIL_AGENT|FAIL_SYSTEM|FAIL_BOTH)/)
   if (match) return match[1] as Verdict
 
@@ -153,9 +166,9 @@ function extractVerdict(text: string): Verdict {
 
 export async function judgeTranscript(options: JudgeOptions): Promise<JudgeResult> {
   const prompt = buildJudgePrompt(options)
-  const chunks: string[] = []
+  const providerName = options.providerName ?? 'claude'
 
-  // Clean env so the SDK subprocess isn't blocked by nested-session guards
+  // Clean env so agent subprocesses aren't blocked by nested-session guards
   const cleanEnv: Record<string, string> = {}
   for (const [key, value] of Object.entries(process.env)) {
     if (value === undefined) continue
@@ -165,33 +178,20 @@ export async function judgeTranscript(options: JudgeOptions): Promise<JudgeResul
     cleanEnv[key] = value
   }
 
-  for await (const message of query({
-    prompt,
-    options: {
-      maxTurns: 3,
-      allowedTools: [],
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      cwd: dirname(options.transcriptPath),
-      env: cleanEnv,
-    },
-  })) {
-    if (message.type === 'assistant' && message.message?.content) {
-      for (const block of message.message.content as Array<{ type: string; text?: string }>) {
-        if (block.type === 'text' && block.text) {
-          chunks.push(block.text)
-        }
-      }
-    }
-  }
-
-  const review = chunks.join('\n')
+  const provider: AgentProvider = getProvider(providerName)
+  const review = await provider.run(prompt, {
+    cwd: dirname(options.transcriptPath),
+    model: options.model,
+    env: cleanEnv,
+  })
 
   return {
     agentScore: extractScore(review, 'AGENT_SCORE'),
     systemScore: extractScore(review, 'SYSTEM_SCORE'),
     verdict: extractVerdict(review),
     review,
+    provider: providerName,
+    model: options.model ?? provider.defaultModel,
   }
 }
 
@@ -210,13 +210,15 @@ export function saveJudgeArtifact(
   const mdPath = join(outputDir, `${options.scenarioId}-${ts}.md`)
   writeFileSync(mdPath, result.review + '\n')
 
-  // Structured summary as JSON
+  // Structured summary as JSON (additive — provider/model fields added)
   const jsonPath = join(outputDir, `${options.scenarioId}-${ts}.json`)
   writeFileSync(jsonPath, JSON.stringify({
     scenarioId: options.scenarioId,
     agentScore: result.agentScore,
     systemScore: result.systemScore,
     verdict: result.verdict,
+    provider: result.provider,
+    model: result.model,
     judgedAt: new Date().toISOString(),
     transcriptPath: options.transcriptPath,
     templatePath: options.templatePath,

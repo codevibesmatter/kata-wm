@@ -128,6 +128,10 @@ export interface HarnessOptions {
   resumeAnswer?: string
   /** Run LLM-as-judge review on the transcript after the scenario completes */
   judge?: boolean
+  /** Provider name for the judge (default: 'claude') */
+  judgeProvider?: string
+  /** Override model for the judge provider */
+  judgeModel?: string
   /** What `kata enter` printed (passed to judge for context) */
   enterOutput?: string
 }
@@ -379,7 +383,8 @@ export async function runScenario(
     if (options.judge && options.transcriptPath && scenario.templatePath) {
       try {
         if (options.verbose) {
-          process.stdout.write('\n[judge] Running pipeline audit...\n')
+          const pName = options.judgeProvider ?? 'claude'
+          process.stdout.write(`\n[judge:${pName}] Running pipeline audit...\n`)
         }
         const resolvedTemplatePath = scenario.templatePath.startsWith('/')
           ? scenario.templatePath
@@ -388,6 +393,8 @@ export async function runScenario(
           transcriptPath: options.transcriptPath,
           templatePath: resolvedTemplatePath,
           enterOutput: options.enterOutput,
+          providerName: options.judgeProvider,
+          model: options.judgeModel,
         })
         result.judgeResult = judgeResult
 

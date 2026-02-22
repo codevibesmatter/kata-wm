@@ -253,31 +253,45 @@ Then run `kata doctor` (p6) to verify everything is correct.
 
 ## External Review Setup
 
-When p3 asks "Enable code review? Which reviewer?":
+When p3 asks "Enable code review? Which reviewer?", first run `kata providers list` to detect which CLIs are installed:
 
-### `codex` — Claude Code sub-agent review
-Uses the batteries `review-agent` sub-agent (no external tool needed). The orchestrator spawns a `review-agent` after each implementation phase:
+```bash
+kata providers list
 ```
-Task(subagent_type="review-agent", prompt="Review git diff for phase P2.1 of spec planning/specs/123-*.md")
+
+Only offer providers whose CLI is detected. Then ask:
+
 ```
-Set in `wm.yaml`:
-```yaml
-reviews:
-  code_reviewer: codex
+AskUserQuestion(questions=[{
+  question: "Which agent providers do you want to configure?",
+  header: "Providers",
+  options: [
+    {label: "Claude only", description: "Default — uses Claude Code agent SDK"},
+    {label: "Claude + Gemini", description: "Add Google Gemini CLI as reviewer/judge"},
+    {label: "Claude + Codex", description: "Add OpenAI Codex CLI as reviewer/judge"},
+    {label: "All three", description: "Claude + Gemini + Codex"},
+    {label: "Skip provider setup", description: "Configure later with: kata providers setup"}
+  ],
+  multiSelect: false
+}])
 ```
+
+After selection, run `kata providers setup` to write config to wm.yaml.
+
+### `codex` — OpenAI Codex CLI review
+Requires the Codex CLI installed:
+```bash
+npm install -g @openai/codex
+```
+Uses `codex exec --sandbox read-only` for code review with full agent capabilities.
 
 ### `gemini` — Google Gemini CLI review
 Requires the Gemini CLI installed and authenticated:
 ```bash
-npm install -g @google/gemini-cli   # or pip install gemini-cli
+npm install -g @google/gemini-cli
 gemini auth login
 ```
-Then set in `wm.yaml`:
-```yaml
-reviews:
-  code_reviewer: gemini
-```
-The implementation template will prompt you to run `gemini review` after each phase.
+Uses `gemini --yolo` for autonomous code review with full agent capabilities.
 
 ### `none` — No external review gate
 Implementation phases complete without a review step. Recommended for solo projects or when using PR review instead.
