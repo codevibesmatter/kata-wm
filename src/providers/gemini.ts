@@ -2,11 +2,12 @@
  * Gemini provider — wraps Google's Gemini CLI.
  *
  * Spawns `gemini` with --yolo for autonomous execution.
- * Large prompts are written to a temp file and passed as file context.
+ * Prompt delivered via -p flag (stdin not supported by gemini CLI).
  * Based on: baseplane/packages/agent-tools/src/gemini/index.ts
  */
 
 import { spawnSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import type { AgentProvider, AgentRunOptions } from './types.js'
 import { preparePrompt } from './prompt.js'
 
@@ -18,19 +19,15 @@ export const geminiProvider: AgentProvider = {
     const model = options.model ?? this.defaultModel ?? 'gemini-2.5-pro'
     const timeoutMs = options.timeoutMs ?? 300_000
 
-    // Use temp file for all prompts (uniform delivery)
+    // For large prompts, write to temp file then read back for -p delivery
     const prepared = preparePrompt(prompt, { thresholdChars: 0 })
 
     try {
-      const args = ['-m', model, '--yolo']
+      const promptText = prepared.filePath
+        ? readFileSync(prepared.filePath, 'utf-8')
+        : prompt
 
-      if (prepared.filePath) {
-        // Pass prompt file as context, with a short instruction
-        args.push('-p', 'Review and analyze the content of the provided file. Follow all instructions within it.')
-        args.push(prepared.filePath)
-      } else {
-        args.push('-p', prompt)
-      }
+      const args = ['-p', promptText, '-m', model, '--yolo']
 
       const result = spawnSync('gemini', args, {
         cwd: options.cwd,

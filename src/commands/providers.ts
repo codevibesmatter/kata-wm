@@ -1,9 +1,11 @@
 /**
  * kata providers — check, list, and setup agent provider CLIs.
  *
+ * All providers use OAuth/CLI login (not API keys).
+ *
  * Usage:
  *   kata providers list      Show provider status (read-only)
- *   kata providers setup     Check CLIs + API keys, write config to wm.yaml
+ *   kata providers setup     Check CLIs, write config to wm.yaml
  */
 
 import { execSync } from 'node:child_process'
@@ -15,8 +17,8 @@ import { findClaudeProjectDir } from '../session/lookup.js'
 export interface ProviderStatus {
   name: string
   installed: boolean
-  apiKeySet: boolean
-  apiKeyEnvVar: string
+  authMethod: string
+  loginCommand: string
   installCommand: string
   defaultModel: string
 }
@@ -24,28 +26,32 @@ export interface ProviderStatus {
 const PROVIDER_DEFS: Array<{
   name: string
   command: string
-  envVar: string
+  authMethod: string
+  loginCmd: string
   installCmd: string
   defaultModel: string
 }> = [
   {
     name: 'claude',
     command: 'claude',
-    envVar: 'ANTHROPIC_API_KEY',
+    authMethod: 'OAuth (claude login)',
+    loginCmd: 'claude login',
     installCmd: 'npm i -g @anthropic-ai/claude-code',
     defaultModel: 'claude-sonnet-4-6',
   },
   {
     name: 'gemini',
     command: 'gemini',
-    envVar: 'GOOGLE_API_KEY',
+    authMethod: 'OAuth (gemini auth login)',
+    loginCmd: 'gemini auth login',
     installCmd: 'npm i -g @google/gemini-cli',
     defaultModel: 'gemini-2.5-pro',
   },
   {
     name: 'codex',
     command: 'codex',
-    envVar: 'OPENAI_API_KEY',
+    authMethod: 'OAuth (codex login)',
+    loginCmd: 'codex login',
     installCmd: 'npm i -g @openai/codex',
     defaultModel: 'gpt-5.2-codex',
   },
@@ -64,8 +70,8 @@ export function checkProviders(): ProviderStatus[] {
   return PROVIDER_DEFS.map((def) => ({
     name: def.name,
     installed: isCommandAvailable(def.command),
-    apiKeySet: !!process.env[def.envVar],
-    apiKeyEnvVar: def.envVar,
+    authMethod: def.authMethod,
+    loginCommand: def.loginCmd,
     installCommand: def.installCmd,
     defaultModel: def.defaultModel,
   }))
@@ -77,10 +83,12 @@ function printProviderStatus(statuses: ProviderStatus[]): void {
 
   for (const s of statuses) {
     const installed = s.installed ? '✅ installed' : '❌ not found'
-    const apiKey = s.apiKeySet ? '✅ set' : '⚠️  not set'
     process.stdout.write(
-      `  ${s.name.padEnd(10)} ${installed.padEnd(18)} API key: ${apiKey}\n`,
+      `  ${s.name.padEnd(10)} ${installed}\n`,
     )
+    if (s.installed) {
+      process.stdout.write(`             Auth: ${s.authMethod}\n`)
+    }
   }
 
   const available = statuses.filter((s) => s.installed)
@@ -91,6 +99,14 @@ function printProviderStatus(statuses: ProviderStatus[]): void {
     process.stdout.write('\nTo install missing providers:\n')
     for (const m of missing) {
       process.stdout.write(`  ${m.installCommand}\n`)
+    }
+  }
+
+  const notLoggedIn = statuses.filter((s) => s.installed)
+  if (notLoggedIn.length > 0) {
+    process.stdout.write('\nTo authenticate:\n')
+    for (const s of notLoggedIn) {
+      process.stdout.write(`  ${s.loginCommand}\n`)
     }
   }
   process.stdout.write('\n')

@@ -21,6 +21,7 @@ export const codexProvider: AgentProvider = {
       'exec',
       '--sandbox', 'read-only',
       '--json',
+      '--skip-git-repo-check',
       '--cd', options.cwd,
       '-c', `model="${model}"`,
       '-',  // read prompt from stdin
