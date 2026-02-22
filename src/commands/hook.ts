@@ -228,7 +228,7 @@ async function handleModeGate(input: Record<string, unknown>): Promise<void> {
             hookEventName: 'PreToolUse',
             permissionDecision: 'deny',
             permissionDecisionReason:
-              'Enter a mode first: ./kata enter <mode>. Write operations are blocked until a mode is active.',
+              'Enter a mode first: kata enter <mode>. Write operations are blocked until a mode is active.',
           },
         })
         return
