@@ -98,15 +98,42 @@ Agentic eval suite using `@anthropic-ai/claude-agent-sdk`. The harness drives in
 - **`settingSources: ['project']`** loads `.claude/settings.json` — hooks fire naturally in the SDK, no manual context injection needed. Never use `appendSystemPrompt` for hook context.
 - **`permissionMode: 'bypassPermissions'`** — full agent autonomy, no tool approval prompts.
 - **AskUserQuestion pause/resume** — a PreToolUse hook intercepts AskUserQuestion, stops the session (`continue: false`), outputs question + session_id. Resume with `--resume=<session_id> --answer="<choice>"`.
-- **Fixture per scenario** — `EvalScenario.fixture` field selects which `eval-fixtures/` dir to copy. Fresh projects get `git init` automatically.
+- **Fixture freshness** — `EvalScenario.fixture` field selects which `eval-fixtures/` dir to copy. After copying, the harness runs `kata batteries --update` so templates always reflect latest package versions. Fixtures carry only `settings.json` and `wm.yaml`, not template `.md` files.
 - **`CLAUDE_PROJECT_DIR` stripped** from inner agent env so it doesn't escape to the outer project.
+
+### Assertion library (`eval/assertions.ts`)
+
+All eval assertions live in `eval/assertions.ts`. Scenario files import individual assertions or preset arrays — no inline assertion definitions in workflow scenarios.
+
+**Preset arrays** compose common assertion sets:
+- `workflowPresets(mode)` — correct mode, new commit, clean tree, can-exit
+- `workflowPresetsWithPush(mode)` — workflow + changes pushed
+- `planningPresets(mode)` — workflow+push + spec created/approved/has behaviors
+- `onboardPresets` — git init, settings.json, wm.yaml, templates seeded
+
+**Config-driven assertions** read `spec_path` and `research_path` from `wm.yaml` with defaults (`planning/specs`, `planning/research`).
+
+**Content-signal assertions** (`assertDiffContains`, `assertDiffNonTrivial`) verify substantive work without coupling to application-specific file paths.
+
+### Scenario design principles
+
+- **Simple prompts** — describe the task in natural language ("add a health endpoint"). No `kata enter` commands, no pre-answered template questions. Let hooks and templates guide the agent.
+- **Generic assertions** — test workflow outcomes (mode entered, committed, can-exit), not application specifics (no `login.tsx`, `better-auth`).
+- **Harness-mechanic scenarios** (`mode-entry`, `ask-user-pause`) may keep inline assertions since they test isolation/pause behavior, not workflow.
 
 ### Running evals
 
 ```bash
-npx tsx eval/run.ts --scenario=onboard --verbose       # Single scenario
-npx tsx eval/run.ts --list                              # List scenarios
-npx tsx eval/run.ts --scenario=onboard --project=<dir> --resume=<sid> --answer="Quick"  # Resume paused
+npm run eval -- --scenario=task-mode --verbose          # Single scenario
+npm run eval -- --list                                   # List scenarios
+npm run eval -- --scenario=onboard --project=<dir> --resume=<sid> --answer="Quick"  # Resume paused
+npm run eval -- --judge                                  # Run LLM-as-judge on transcripts
+```
+
+### Eval tests
+
+```bash
+bun test eval/assertions.test.ts                        # Run assertion unit tests
 ```
 
 ### Eval mode
@@ -118,7 +145,7 @@ npx tsx eval/run.ts --scenario=onboard --project=<dir> --resume=<sid> --answer="
 | Fixture | Path | Description |
 |---------|------|-------------|
 | `tanstack-start` | `eval-fixtures/tanstack-start/` | Fresh TanStack Start app, no kata config |
-| `web-app` | `eval-fixtures/web-app/` | Pre-configured with kata hooks, wm.yaml, templates |
+| `web-app` | `eval-fixtures/web-app/` | Pre-configured with kata hooks, wm.yaml (templates seeded by batteries at eval time) |
 
 ## Project root resolution
 
