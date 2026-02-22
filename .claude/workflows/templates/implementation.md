@@ -211,33 +211,59 @@ P3: Close
 - **No scope creep** — spec's non-goals are off-limits
 - **Commit per phase** — smaller commits, easier review
 
-## IMPL Sub-Phase
+## VERIFY Protocol
 
-Before writing production code:
-1. Read the spec section for this phase IN FULL
-2. Read the `test_cases:` subsection of the spec phase BEFORE writing any code — these are the behaviors you must satisfy
-3. Write tests alongside (or before) production code to satisfy those test cases
-4. Follow existing patterns in the codebase
+Each VERIFY sub-phase follows this exact sequence. Run deterministic checks
+first, then do a spec-checklist review. Do NOT skip steps or reorder.
 
-## VERIFY Sub-Phase
+### Step 1: Build verification
 
-After the impl agent completes, run automated per-phase verification:
+Run the project's **build command** (e.g. `npm run build`), not bare
+`tsc --noEmit`. Projects with build-time codegen (route types, schema
+generation) need the full pipeline. If the build fails, fix and re-run
+before proceeding.
 
-```bash
-kata verify-phase <phase-id> --issue=<N>
+### Step 2: Run tests
+
+Run the project's test command. If the spec phase has `test_cases:` in
+its YAML, verify each one:
+
+```
+For each test_case in the spec phase:
+  - Does a test exist that covers this case?
+  - If not, write the test BEFORE marking VERIFY complete.
+  - Run the test and confirm it passes.
 ```
 
-This reads commands from `wm.yaml` and runs in sequence:
-1. build — compile/build the project
-2. typecheck — type check without emit
-3. tests — run the test suite
-4. smoke — runtime smoke test
-5. delta — assertion count check (gaming detection)
-6. micro-review — scoped review on phase diff (security/perf/scope only)
+If no test infrastructure exists, check the spec's Verification Strategy
+section for setup instructions.
 
-**If exits non-zero:** Re-spawn impl agent with the failure output as context. Provide the exact failed step name and output. Max 3 retry attempts, then escalate to user.
+### Step 3: Spec-checklist review
 
-**If exits 0:** All steps passed. Mark the VERIFY task complete and proceed to the next phase.
+For each behavior (B1, B2...) covered by this phase, answer:
+
+```
+- [ ] Trigger: Does the code handle the specified trigger?
+- [ ] Expected: Does the output match what the spec says?
+- [ ] Verify: Can the verification method described in the spec confirm it works?
+```
+
+Keep this simple. Do NOT write elaborate self-review prompts — simple
+"does X satisfy Y?" checks are more reliable than complex analysis.
+
+### Step 4: Check for implementation hints
+
+Re-read the spec's Implementation Hints section. Verify:
+- Correct imports used (not guessed from node_modules exploration)
+- Initialization follows documented patterns
+- Known gotchas addressed
+
+### Retry limits
+
+If a build or test fails:
+- Fix the issue using the error output (not blind retry)
+- Maximum 3 fix attempts per failure before escalating to user
+- Never silence errors, skip tests, or weaken assertions to pass
 
 ## Stop Conditions
 
