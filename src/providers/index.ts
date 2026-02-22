@@ -2,7 +2,7 @@
  * Provider registry — maps names to AgentProvider implementations.
  */
 
-export type { AgentProvider, AgentRunOptions } from './types.js'
+export type { AgentProvider, AgentRunOptions, ModelOption, ThinkingLevel } from './types.js'
 export { preparePrompt, loadPrompt, listPrompts } from './prompt.js'
 export type { PreparedPrompt } from './prompt.js'
 export { claudeProvider } from './claude.js'

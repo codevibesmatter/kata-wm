@@ -7,14 +7,64 @@
  */
 
 import { spawn } from 'node:child_process'
-import type { AgentProvider, AgentRunOptions } from './types.js'
+import { readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { homedir } from 'node:os'
+import type { AgentProvider, AgentRunOptions, ModelOption, ThinkingLevel } from './types.js'
+
+const codexThinking: ThinkingLevel[] = [
+  { id: 'low', description: 'Fast responses with lighter reasoning' },
+  { id: 'medium', description: 'Balances speed and reasoning depth' },
+  { id: 'high', description: 'Greater reasoning depth for complex problems' },
+  { id: 'xhigh', description: 'Extra high reasoning depth' },
+]
 
 export const codexProvider: AgentProvider = {
   name: 'codex',
-  defaultModel: 'gpt-5.2-codex',
+  defaultModel: undefined,
+  models: [
+    { id: 'gpt-5.3-codex', description: 'Latest frontier agentic coding model', default: true, thinkingLevels: codexThinking },
+    { id: 'gpt-5.3-codex-spark', description: 'Ultra-fast coding model' },
+    { id: 'gpt-5.2-codex', description: 'Frontier agentic coding model', thinkingLevels: codexThinking },
+    { id: 'gpt-5.1-codex-max', description: 'Codex-optimized flagship for deep and fast reasoning', thinkingLevels: codexThinking },
+    { id: 'gpt-5.1-codex', description: 'Optimized for codex', thinkingLevels: codexThinking },
+    { id: 'gpt-5.2', description: 'Latest frontier model with improvements across knowledge, reasoning and coding', thinkingLevels: codexThinking },
+    { id: 'gpt-5.1', description: 'Broad world knowledge with strong general reasoning', thinkingLevels: codexThinking },
+    { id: 'gpt-5-codex', description: 'Optimized for codex', thinkingLevels: codexThinking },
+    { id: 'gpt-5', description: 'Broad world knowledge with strong general reasoning', thinkingLevels: codexThinking },
+    { id: 'gpt-5.1-codex-mini', description: 'Optimized for codex, cheaper, faster' },
+    { id: 'gpt-5-codex-mini', description: 'Optimized for codex, cheaper, faster' },
+  ],
+
+  async fetchModels(): Promise<ModelOption[]> {
+    const cachePath = join(homedir(), '.codex', 'models_cache.json')
+    if (!existsSync(cachePath)) return this.models
+
+    try {
+      const raw = readFileSync(cachePath, 'utf-8')
+      const data = JSON.parse(raw) as { models: Array<{
+        slug: string; display_name: string; description: string; priority: number
+        supported_reasoning_levels?: Array<{ effort: string; description: string }>
+      }> }
+      const first = data.models[0]?.slug
+      return data.models.map((m) => ({
+        id: m.slug,
+        description: m.description,
+        default: m.slug === first,
+        ...(m.supported_reasoning_levels?.length ? {
+          thinkingLevels: m.supported_reasoning_levels.map((r) => ({
+            id: r.effort,
+            description: r.description,
+          })),
+        } : {}),
+      }))
+    } catch {
+      return this.models
+    }
+  },
 
   async run(prompt: string, options: AgentRunOptions): Promise<string> {
-    const model = options.model ?? this.defaultModel ?? 'gpt-5.2-codex'
+    const model = options.model ?? this.defaultModel
     const timeoutMs = options.timeoutMs ?? 300_000
 
     const args = [
@@ -24,9 +74,9 @@ export const codexProvider: AgentProvider = {
       '--ephemeral',
       '--skip-git-repo-check',
       '--cd', options.cwd,
-      '--model', model,
-      '-',  // read prompt from stdin
     ]
+    if (model) args.push('--model', model)
+    args.push('-')  // read prompt from stdin
 
     return new Promise<string>((resolve, reject) => {
       let timer: ReturnType<typeof setTimeout> | undefined

@@ -7,11 +7,30 @@
  * prompt-in/text-out agent task.
  */
 
+export interface ThinkingLevel {
+  id: string
+  description: string
+}
+
+export interface ModelOption {
+  id: string
+  description: string
+  default?: boolean
+  thinkingLevels?: ThinkingLevel[]
+}
+
 export interface AgentProvider {
   /** Provider identifier: 'claude' | 'gemini' | 'codex' */
   name: string
   /** Provider-specific default model. Undefined = CLI's own default. */
   defaultModel?: string
+  /** Hardcoded known models for this provider. */
+  models: ModelOption[]
+  /**
+   * Fetch live model list from CLI cache or API.
+   * Falls back to static `models` array if unavailable.
+   */
+  fetchModels?: () => Promise<ModelOption[]>
   /** Run a prompt through the agent and return the text response. */
   run(prompt: string, options: AgentRunOptions): Promise<string>
 }
