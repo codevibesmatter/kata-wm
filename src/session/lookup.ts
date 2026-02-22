@@ -181,16 +181,17 @@ export function getTemplatesDir(): string {
 }
 
 /**
- * Resolve a template path
- * Priority:
- * 1. Absolute path - use as-is
- * 2. Project-level template (.claude/workflows/templates/) - required
+ * Resolve a template path across all three tiers.
+ * Lookup order (first match wins): project → user → package batteries.
  *
- * Package templates are seeds for `kata setup` only.
- * After setup, the project owns all templates — no package fallback at runtime.
+ * 1. Absolute path — use as-is
+ * 2. Project: .claude/workflows/templates/{name}
+ * 3. User: ~/.config/kata/templates/{name}
+ * 4. Package: batteries/templates/{name}
+ *
  * @param templatePath - Template filename or path
  * @returns Absolute path to template
- * @throws Error if template not found
+ * @throws Error if template not found at any tier
  */
 export function resolveTemplatePath(templatePath: string): string {
   // Absolute path - use as-is
@@ -201,26 +202,85 @@ export function resolveTemplatePath(templatePath: string): string {
     throw new Error(`Template not found: ${templatePath}`)
   }
 
-  // Project-level template (required — no package fallback)
+  const checked: string[] = []
+
+  // 1. Project-level template (highest priority)
   try {
     const projectRoot = findClaudeProjectDir()
     const projectTemplate = path.join(projectRoot, '.claude/workflows/templates', templatePath)
+    checked.push(projectTemplate)
     if (existsSync(projectTemplate)) {
       return projectTemplate
     }
-    throw new Error(
-      `Template not found: ${templatePath}\n` +
-        `Expected at: .claude/workflows/templates/${templatePath}\n` +
-        `Run 'kata setup' to initialize project templates.`,
-    )
-  } catch (err) {
-    if ((err as Error).message.includes('Template not found')) {
-      throw err
-    }
-    // No Claude project dir found
-    throw new Error(
-      `Template not found: ${templatePath}\n` +
-        `Not in a Claude project. Run 'kata setup' to initialize.`,
-    )
+  } catch {
+    // No Claude project dir found — skip project tier
   }
+
+  // 2. User-level template
+  const userTemplate = path.join(getUserConfigDir(), 'templates', templatePath)
+  checked.push(userTemplate)
+  if (existsSync(userTemplate)) {
+    return userTemplate
+  }
+
+  // 3. Package batteries template (lowest priority, runtime fallback)
+  const packageTemplate = path.join(getPackageRoot(), 'batteries', 'templates', templatePath)
+  checked.push(packageTemplate)
+  if (existsSync(packageTemplate)) {
+    return packageTemplate
+  }
+
+  throw new Error(
+    `Template not found: ${templatePath}\n` +
+      `Checked:\n${checked.map((p) => `  - ${p}`).join('\n')}\n` +
+      `Run 'kata batteries' to seed project templates, or 'kata batteries --user' for user-level.`,
+  )
+}
+
+/**
+ * Resolve a spec template path across all three tiers.
+ * Lookup order (first match wins): project → user → package batteries.
+ *
+ * 1. Project: planning/spec-templates/{name}
+ * 2. User: ~/.config/kata/spec-templates/{name}
+ * 3. Package: batteries/spec-templates/{name}
+ *
+ * @param name - Spec template filename (e.g. "feature.md")
+ * @returns Absolute path to spec template
+ * @throws Error if spec template not found at any tier
+ */
+export function resolveSpecTemplatePath(name: string): string {
+  const checked: string[] = []
+
+  // 1. Project-level spec template
+  try {
+    const projectRoot = findClaudeProjectDir()
+    const projectTemplate = path.join(projectRoot, 'planning', 'spec-templates', name)
+    checked.push(projectTemplate)
+    if (existsSync(projectTemplate)) {
+      return projectTemplate
+    }
+  } catch {
+    // No Claude project dir found — skip project tier
+  }
+
+  // 2. User-level spec template
+  const userTemplate = path.join(getUserConfigDir(), 'spec-templates', name)
+  checked.push(userTemplate)
+  if (existsSync(userTemplate)) {
+    return userTemplate
+  }
+
+  // 3. Package batteries spec template
+  const packageTemplate = path.join(getPackageRoot(), 'batteries', 'spec-templates', name)
+  checked.push(packageTemplate)
+  if (existsSync(packageTemplate)) {
+    return packageTemplate
+  }
+
+  throw new Error(
+    `Spec template not found: ${name}\n` +
+      `Checked:\n${checked.map((p) => `  - ${p}`).join('\n')}\n` +
+      `Run 'kata batteries' to seed spec templates, or 'kata batteries --user' for user-level.`,
+  )
 }
