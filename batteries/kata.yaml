@@ -34,6 +34,7 @@ modes:
     stop_conditions:
       - tasks_complete
       - committed
+      - pushed
     intent_keywords:
       - "research"
       - "explore"
@@ -48,6 +49,7 @@ modes:
     stop_conditions:
       - tasks_complete
       - committed
+      - pushed
     intent_keywords:
       - "plan feature"
       - "spec"

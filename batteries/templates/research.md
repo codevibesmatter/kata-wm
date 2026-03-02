@@ -151,7 +151,7 @@ phases:
     task_config:
       title: "P3: External - documentation and best practices (optional)"
       labels: [phase, phase-3, external, optional]
-      depends_on: [p2]
+      depends_on: [p1]
     gate: false
     steps:
       - id: web-research

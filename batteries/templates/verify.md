@@ -66,7 +66,7 @@ phases:
           ```bash
           # Example: npm run dev &
           # Wait for health endpoint to respond
-          curl -s http://localhost:{PORT}/health || sleep 2 && curl ...
+          curl -s http://localhost:{PORT}/health || (sleep 2 && curl -s http://localhost:{PORT}/health)
           ```
 
           Confirm the server is healthy before proceeding.
@@ -83,6 +83,9 @@ phases:
       - id: expand-vp-steps
         title: "Expand VP steps as individual tasks"
         instruction: |
+          **Note:** Verify mode is the one exception to the "no TaskCreate" rule.
+          TaskCreate is used here intentionally to expand VP steps as trackable tasks.
+
           For each VP step found in P0, create a native task using TaskCreate:
 
           ```
@@ -134,8 +137,25 @@ phases:
           **Hard rules:**
           - Fix the implementation code, NEVER modify VP steps — VP steps are the source of truth
           - Maximum 3 fix cycles per failed step
-          - If still failing after 3 cycles: record as PERMANENTLY FAILED with full diagnosis
+          - If still failing after 3 cycles: escalate to user (see below) before proceeding
           - Do not skip steps even if they seem unrelated to the failure
+
+          **After 3 failed cycles — escalate:**
+
+          AskUserQuestion(questions=[{
+            question: "VP step {N} still failing after 3 fix attempts. How to proceed?",
+            header: "VP Failure",
+            options: [
+              {label: "Accept and continue", description: "Record as FAILED and move to next step — I'll address it separately"},
+              {label: "Open bug issue", description: "Create a GitHub issue for this failure, then continue"},
+              {label: "Keep session open", description: "Stop here — I'll investigate manually before proceeding"}
+            ],
+            multiSelect: false
+          }])
+
+          If "Accept and continue": record as PERMANENTLY FAILED with full diagnosis, proceed.
+          If "Open bug issue": `gh issue create --title "bug: VP{N} failure — {description}" --body "{diagnosis}"`, then proceed.
+          If "Keep session open": stop. Do not mark the task complete.
 
           After fixing: commit code changes before writing evidence.
           ```bash
@@ -372,6 +392,12 @@ P3: Evidence
     ├── Update GitHub issue (if issue-based)
     └── Report pass/fail results
 ```
+
+## TaskCreate Exception
+
+Verify mode is the **only mode** that uses `TaskCreate`. This overrides the standard
+`task_rules` which say "Do NOT create new tasks with TaskCreate." In P1, VP steps are
+expanded as individual tasks so each can be tracked and marked pass/fail independently.
 
 ## VP Step Execution Protocol
 

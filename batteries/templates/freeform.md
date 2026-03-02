@@ -48,10 +48,10 @@ AskUserQuestion(questions=[{
 ```
 
 Then follow the user's choice:
-- **Start planning** → `wm enter planning`
-- **Start implementing** → `wm enter implementation`
+- **Start planning** → `kata enter planning`
+- **Start implementing** → `kata enter implementation`
 - **Save findings** → Write to `planning/research/{YYYY-MM-DD}-{slug}.md`, then commit
-- **Debug** → `wm enter debug`
+- **Debug** → `kata enter debug`
 - **Done** → Summarize findings in a few sentences and stop (never run `kata exit`)
 
 ## Quick Research Output Format

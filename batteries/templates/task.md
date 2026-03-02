@@ -24,8 +24,8 @@ phases:
           - [ ] Chore with GitHub issue
 
           **If larger scope detected:** Tell the user and suggest:
-          `wm enter planning` for full spec
-          `wm enter implementation` if spec exists
+          `kata enter planning` for full spec
+          `kata enter implementation` if spec exists
 
           **GitHub issue?**
           ```bash
@@ -173,10 +173,10 @@ workflow_id_format: "TK-{session_last_4}-{MMDD}"
 
 ## When NOT to Use
 
-- Features needing full design → `wm enter planning`
-- Complex multi-file changes → `wm enter planning`
-- Bugs needing systematic investigation → `wm enter debug`
-- Work spanning multiple sessions → `wm enter planning`
+- Features needing full design → `kata enter planning`
+- Complex multi-file changes → `kata enter planning`
+- Bugs needing systematic investigation → `kata enter debug`
+- Work spanning multiple sessions → `kata enter planning`
 
 ## Flow
 

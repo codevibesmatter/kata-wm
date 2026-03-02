@@ -26,18 +26,11 @@ phases:
                 {label: "Epic", description: "Large initiative spanning multiple features"}
               ],
               multiSelect: false
-            },
-            {
-              question: "Do you have a GitHub issue for this?",
-              header: "Issue",
-              options: [
-                {label: "Yes — link it", description: "I'll provide the issue number"},
-                {label: "No — create one", description: "Create a new issue after spec is ready"},
-                {label: "No — skip GitHub", description: "Skip GitHub tracking for now"}
-              ],
-              multiSelect: false
             }
           ])
+
+          If `--issue=N` was passed at mode entry, note the issue number.
+          If no issue was provided, note "create after spec is ready."
 
           Document: type, scope, GitHub issue # if known.
           Then: Mark this task completed via TaskUpdate
@@ -45,7 +38,10 @@ phases:
       - id: codebase-research
         title: "Research existing patterns"
         instruction: |
-          SPAWN 2 parallel Explore agents for fast codebase research:
+          SPAWN 2 parallel Explore agents for fast codebase research.
+
+          **Substitute the actual feature topic** from the P0 clarify-scope step
+          in place of `{feature_topic}` below before spawning the agents.
 
           **Agent 1: Code patterns and similar implementations**
           Task(subagent_type="Explore", prompt="

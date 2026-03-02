@@ -18,6 +18,14 @@ phases:
           ls planning/specs/ | grep "{issue-number or keyword}"
           ```
 
+          **Verify it is approved before proceeding:**
+          ```bash
+          grep 'status:' planning/specs/{spec-file}.md
+          ```
+          If `status:` is not `approved`, stop and tell the user:
+          "This spec has status '{status}' — it must be approved before implementation can start.
+          Run `kata enter planning --issue=N` to complete the review process."
+
           Read the spec IN FULL. Understand:
           - All behaviors (B1, B2, ...) and their acceptance criteria
           - All implementation phases and their tasks
