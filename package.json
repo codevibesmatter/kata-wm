@@ -1,6 +1,6 @@
 {
   "name": "@codevibesmatter/kata",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Structured workflow kata for Claude Code — modes, phases, tasks, and stop hooks for disciplined AI coding sessions",
   "type": "module",
   "exports": {
