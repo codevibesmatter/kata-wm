@@ -4,6 +4,7 @@ import * as path from 'node:path'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { findProjectDir, getPackageRoot, getSessionsDir } from '../session/lookup.js'
 import { resolveWmBin } from './setup.js'
+import { isNativeTasksEnabled } from '../utils/tasks-check.js'
 
 interface DiagnosticResult {
   check: string
@@ -244,6 +245,46 @@ export async function doctor(args: string[]): Promise<void> {
       check: 'hooks_registered',
       status: 'ok',
       message: `All required hooks registered: ${hookCheck.registered.join(', ')}`,
+      fixable: false,
+    })
+  }
+
+  // Check: Native tasks enabled
+  if (!isNativeTasksEnabled()) {
+    diagnostics.push({
+      check: 'native_tasks',
+      status: 'warning',
+      message:
+        'CLAUDE_CODE_ENABLE_TASKS is disabled — kata workflow tracking will not work. ' +
+        'Set env.CLAUDE_CODE_ENABLE_TASKS to "true" in ~/.claude/settings.json, then restart Claude Code.',
+      fixable: true,
+    })
+    if (parsed.fix) {
+      // Write the flag into ~/.claude/settings.json
+      const { homedir } = await import('node:os')
+      const userSettingsPath = path.join(homedir(), '.claude', 'settings.json')
+      let userSettings: Record<string, unknown> = {}
+      if (existsSync(userSettingsPath)) {
+        try {
+          userSettings = JSON.parse(readFileSync(userSettingsPath, 'utf-8')) as Record<
+            string,
+            unknown
+          >
+        } catch {
+          userSettings = {}
+        }
+      }
+      const envBlock = (userSettings.env ?? {}) as Record<string, unknown>
+      envBlock.CLAUDE_CODE_ENABLE_TASKS = 'true'
+      userSettings.env = envBlock
+      writeFileSync(userSettingsPath, `${JSON.stringify(userSettings, null, 2)}\n`, 'utf-8')
+      fixed.push('Set CLAUDE_CODE_ENABLE_TASKS=true in ~/.claude/settings.json — restart Claude Code to activate')
+    }
+  } else {
+    diagnostics.push({
+      check: 'native_tasks',
+      status: 'ok',
+      message: 'Native tasks enabled (CLAUDE_CODE_ENABLE_TASKS)',
       fixable: false,
     })
   }
