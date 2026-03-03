@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import * as os from 'node:os'
 import jsYaml from 'js-yaml'
 
@@ -118,6 +118,41 @@ describe('canExit', () => {
     const result = JSON.parse(output) as { canExit: boolean; reasons: string[] }
     expect(result.canExit).toBe(true)
     expect(result.reasons).toHaveLength(0)
+  })
+
+  it('tasks_complete: blocks exit when pending native tasks exist', async () => {
+    // Regression: "on base branch / no diff" used to short-circuit ALL checks including
+    // tasks_complete, allowing exit at session start before any work was done.
+    writeFileSync(
+      join(tmpDir, '.claude', 'workflows', 'kata.yaml'),
+      jsYaml.dump({
+        modes: {
+          research: { template: 'research.md', stop_conditions: ['tasks_complete', 'committed'] },
+        },
+      }),
+    )
+
+    const sessionId = process.env.CLAUDE_SESSION_ID!
+    createSessionState({
+      sessionType: 'research',
+      currentMode: 'research',
+      workflowId: 'RE-test-0303',
+    })
+
+    // Write a pending native task
+    const tasksDir = resolve(os.homedir(), '.claude', 'tasks', sessionId)
+    mkdirSync(tasksDir, { recursive: true })
+    writeFileSync(
+      join(tasksDir, '1.json'),
+      JSON.stringify({ id: '1', subject: 'RE-test-0303: do something', status: 'pending', blocks: [], blockedBy: [] }),
+    )
+
+    const output = await captureCanExit(['--json', `--session=${sessionId}`])
+    rmSync(tasksDir, { recursive: true, force: true })
+
+    const result = JSON.parse(output) as { canExit: boolean; reasons: string[] }
+    expect(result.canExit).toBe(false)
+    expect(result.reasons.some((r) => r.includes('task(s) still pending'))).toBe(true)
   })
 
   it('checkTestsPass: blocks when no phase evidence files exist', async () => {

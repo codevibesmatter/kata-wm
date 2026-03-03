@@ -229,7 +229,9 @@ function validateCanExit(
 
   const checks = new Set(stopConditions)
 
-  // If we're on the base branch with no diff, work is already merged — skip code checks
+  // If we're on the base branch with no diff, work is already merged — skip git checks only.
+  // tasks_complete is still checked so pending tasks block exit even with no diff.
+  let skipGitChecks = false
   try {
     const cfg = loadKataConfig()
     const diffBase = cfg.project?.diff_base ?? 'origin/main'
@@ -243,7 +245,7 @@ function validateCanExit(
       stdio: ['pipe', 'pipe', 'pipe'],
     }).trim()
     if (currentBranch === baseBranch && !hasDiff) {
-      return { canExit: true, reasons: [], hasOpenTasks: false, usingTasks: false }
+      skipGitChecks = true
     }
   } catch {
     // Continue with normal checks if git is unavailable
@@ -269,29 +271,31 @@ function validateCanExit(
   const wmConfig = loadKataConfig()
   const nonCodePaths = wmConfig.non_code_paths
 
-  // ── tests_pass ──
-  if (checks.has('tests_pass') && issueNumber) {
-    const testsCheck = checkTestsPass(issueNumber, nonCodePaths)
-    if (!testsCheck.passed && testsCheck.reason) {
-      reasons.push(testsCheck.reason)
+  if (!skipGitChecks) {
+    // ── tests_pass ──
+    if (checks.has('tests_pass') && issueNumber) {
+      const testsCheck = checkTestsPass(issueNumber, nonCodePaths)
+      if (!testsCheck.passed && testsCheck.reason) {
+        reasons.push(testsCheck.reason)
+      }
     }
-  }
 
-  // ── feature_tests_added ──
-  if (checks.has('feature_tests_added')) {
-    const featureTestsCheck = checkFeatureTestsAdded()
-    if (!featureTestsCheck.passed) {
-      reasons.push(
-        'At least one new test function required (it/test/describe). See: arXiv 2402.13521',
-      )
+    // ── feature_tests_added ──
+    if (checks.has('feature_tests_added')) {
+      const featureTestsCheck = checkFeatureTestsAdded()
+      if (!featureTestsCheck.passed) {
+        reasons.push(
+          'At least one new test function required (it/test/describe). See: arXiv 2402.13521',
+        )
+      }
     }
-  }
 
-  // ── committed + pushed (check after task/verification checks) ──
-  if (reasons.length === 0) {
-    if (checks.has('committed') || checks.has('pushed')) {
-      const globalCheck = checkGlobalConditions(checks)
-      reasons.push(...globalCheck.reasons)
+    // ── committed + pushed (check after task/verification checks) ──
+    if (reasons.length === 0) {
+      if (checks.has('committed') || checks.has('pushed')) {
+        const globalCheck = checkGlobalConditions(checks)
+        reasons.push(...globalCheck.reasons)
+      }
     }
   }
 
