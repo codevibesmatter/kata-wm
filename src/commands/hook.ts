@@ -8,6 +8,7 @@ import { getStateFilePath, findProjectDir, getSessionsDir } from '../session/loo
 import { readState, stateExists } from '../state/reader.js'
 import { readNativeTaskFiles } from './enter/task-factory.js'
 import type { SessionState } from '../state/schema.js'
+import { isNativeTasksEnabled } from '../utils/tasks-check.js'
 
 /**
  * Claude Code hook output format
@@ -150,10 +151,15 @@ export async function handleSessionStart(input: Record<string, unknown>): Promis
     logHook(sessionId, { hook: 'session-start', decision: 'context', source })
   }
 
+  // Prepend tasks-disabled warning when CLAUDE_CODE_ENABLE_TASKS=false
+  const tasksWarning = isNativeTasksEnabled()
+    ? ''
+    : '\n⚠️ WARNING: CLAUDE_CODE_ENABLE_TASKS is disabled. kata workflow tracking (TaskList, TaskUpdate) will not work. Enable native tasks in ~/.claude/settings.json: set env.CLAUDE_CODE_ENABLE_TASKS to "true".\n'
+
   outputJson({
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext,
+      additionalContext: tasksWarning + additionalContext,
     },
   })
 }

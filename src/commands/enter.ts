@@ -11,6 +11,7 @@ import { readState, stateExists } from '../state/reader.js'
 import { writeState } from '../state/writer.js'
 import { loadKataConfig, resolveKataModeAlias } from '../config/kata-config.js'
 import { generateWorkflowId, generateWorkflowIdForIssue } from '../utils/workflow-id.js'
+import { isNativeTasksEnabled } from '../utils/tasks-check.js'
 import type { SessionState } from '../state/schema.js'
 import { validatePhases, formatValidationErrors } from '../validation/index.js'
 import { readFullTemplateContent, type SpecPhase } from '../yaml/index.js'
@@ -240,6 +241,18 @@ async function enterWithCustomTemplate(
 
   // Output human-readable guidance - native tasks mode
   if (guidance.requiredTodos.length > 0 && !parsed.dryRun) {
+    if (!isNativeTasksEnabled()) {
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('⚠️  WARNING: Native tasks are disabled (CLAUDE_CODE_ENABLE_TASKS=false)')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('   kata workflow tracking requires native tasks. TaskList will not work.')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('   To enable: set CLAUDE_CODE_ENABLE_TASKS=true in ~/.claude/settings.json')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('')
+    }
     // biome-ignore lint/suspicious/noConsole: intentional CLI output
     console.error('')
     // biome-ignore lint/suspicious/noConsole: intentional CLI output
@@ -737,6 +750,19 @@ export async function enter(args: string[]): Promise<void> {
 
   // Output human-readable guidance to stderr - native tasks mode
   if (guidance.requiredTodos.length > 0 && !isAlreadyInMode && !parsed.dryRun) {
+    // Warn if native tasks are disabled — kata's workflow tracking won't work
+    if (!isNativeTasksEnabled()) {
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('⚠️  WARNING: Native tasks are disabled (CLAUDE_CODE_ENABLE_TASKS=false)')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('   kata workflow tracking requires native tasks. TaskList will not work.')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('   To enable: set CLAUDE_CODE_ENABLE_TASKS=true in ~/.claude/settings.json')
+      // biome-ignore lint/suspicious/noConsole: intentional CLI output
+      console.error('')
+    }
     // Native tasks mode: tasks already created with dependencies - direct agent to use TaskList
     // biome-ignore lint/suspicious/noConsole: intentional CLI output
     console.error('')
