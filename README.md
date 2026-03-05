@@ -1,15 +1,45 @@
 # @codevibesmatter/kata
 
-Structured workflow CLI for [Claude Code](https://claude.ai/claude-code). Adds session modes, phase tracking, and stop-condition enforcement to your AI coding sessions.
+Structured workflow CLI for [Claude Code](https://claude.ai/claude-code). Wraps sessions with modes, phase task enforcement, and a stop hook that blocks exit until phases are done.
 
-## What it does
+## Table of Contents
 
-Without `kata`, Claude sessions are unstructured — the agent can stop at any time, skip phases, or lose context. `kata` wraps your Claude Code project with:
+1. [What kata does](#what-kata-does)
+2. [Install](#install)
+3. [Quick start](#quick-start)
+4. [Built-in modes](#built-in-modes)
+5. [How it works](#how-it-works)
+   - [Mode lifecycle](#mode-lifecycle)
+   - [Context injection](#context-injection)
+   - [Planning → Implementation pipeline](#planning--implementation-pipeline)
+   - [Hook chain](#hook-chain)
+6. [Stop conditions](#stop-conditions)
+7. [Command reference](#command-reference)
+   - [Core commands](#core-commands)
+   - [Other commands](#other-commands)
+8. [Hooks reference](#hooks-reference)
+9. [Configuration (kata.yaml)](#configuration-katayaml)
+10. [Custom modes](#custom-modes)
+11. [Batteries system](#batteries-system)
+12. [Architecture](#architecture)
+13. [Comparison to similar tools](#comparison-to-similar-tools)
+14. [License](#license)
 
-- **Modes** — named workflows (planning, implementation, research, etc.) with predefined phases
-- **Native task tracking** — phase tasks created automatically via Claude's task system
-- **Stop hooks** — blocks the session from ending until all phase tasks are complete
-- **Session continuity** — state survives context compaction, works across long sessions
+---
+
+## What kata does
+
+Claude sessions are unstructured by default. The agent can answer, stop, and close the session at any time — even mid-task, mid-phase, or before committing work.
+
+**kata enforces that sessions complete.** When you enter a mode, kata creates native phase tasks with dependency chains. A stop hook intercepts every attempt to end the session and blocks exit until all phase tasks are done, work is committed, and any additional stop conditions are met.
+
+Three concrete benefits:
+
+- **Phase tasks auto-created** — `kata enter planning` creates the research → spec → review → approved task chain. Claude sees these via `TaskList` and follows them in order.
+- **Stop hook blocks early exit** — Claude cannot end the session until all tasks are complete. No skipping the verify phase. No stopping before committing.
+- **Session state survives context compaction** — mode, phase, and workflow ID are persisted to disk. Long sessions don't lose their place when the context window rolls over.
+
+---
 
 ## Install
 
@@ -23,148 +53,147 @@ Or globally:
 npm install -g @codevibesmatter/kata
 ```
 
-## Getting started
+---
 
-After installing, tell Claude:
+## Quick start
+
+**1. Install kata**
+
+```bash
+npm install --save-dev @codevibesmatter/kata
+```
+
+**2. Set up kata in your project**
+
+Tell Claude:
 
 > Set up kata for this project
 
-Claude will run `kata setup`, register the hooks, and walk you through project configuration.
+Claude runs `kata setup`, registers the stop hook and session hooks in `.claude/settings.json`, and configures `.kata/kata.yaml` for your project. Alternatively, run `kata enter onboard` yourself — this starts the agent-guided onboarding walkthrough.
 
-## Usage
+**3. Enter a mode**
 
-```bash
-kata enter planning          # Enter a mode (creates phase tasks)
-kata status                  # Show current mode and phase
-kata can-exit                # Check if all phase tasks are complete
-kata exit                    # Exit current mode
-kata prime                   # Output context injection block (for prompts)
-kata doctor                  # Diagnose session state
-```
-
-Add to `package.json` scripts for shorthand access:
-
-```json
-"scripts": {
-  "kata": "kata"
-}
-```
-
-Then use `pnpm kata <cmd>` or `npm run kata <cmd>`.
-
-### Built-in modes
-
-| Mode | Description |
-|------|-------------|
-| `planning` | Research → spec → review → finalize |
-| `implementation` | Claim → implement → verify → close |
-| `research` | Explore → synthesize findings |
-| `task` | Combined planning + implementation for small tasks |
-| `freeform` | Quick questions, no phase structure |
-| `setup` | Guided project configuration interview |
-
-### Entering a mode
+For planning work linked to a GitHub issue:
 
 ```bash
-kata enter planning
-kata enter implementation
-kata enter implementation --issue=123    # Link to a GitHub issue
+kata enter planning --issue=42
 ```
 
-On entry, `kata` creates native tasks for each phase with dependency chains. Claude sees these in `TaskList` and follows them in order.
-
-### Checking progress
+For a small self-contained task (no issue required):
 
 ```bash
-kata status
-# Mode: implementation
-# Phase: p1
-# Workflow ID: IMPL-0123-0219
+kata enter task
+```
 
+Phase tasks appear immediately in Claude's task list with dependency chains already set up.
+
+**4. Work through the phases**
+
+Claude follows the task dependency chain. Each phase must complete before the next unlocks. The stop hook silently blocks any attempt to end the session early.
+
+**5. Check exit readiness and exit**
+
+```bash
 kata can-exit
-# ✗ Cannot exit:
-#   2 task(s) still pending
-#     - [2] IMPL-0123-0219: P1: Implement
-#     - [3] IMPL-0123-0219: P2: Verify
+# All stop conditions met — ready to exit
+
+kata exit
 ```
 
-### Stop hook
+If `kata can-exit` reports unmet conditions (pending tasks, uncommitted changes, tests failing), address them and check again.
 
-When Claude tries to stop, the Stop hook calls `kata hook stop-conditions`. If there are incomplete tasks, Claude receives a BLOCK signal with a summary of what's left. The session won't end until the agent completes all phase tasks.
+---
 
-## Configuration
+## Built-in modes
 
-`kata setup` creates `.claude/workflows/wm.yaml`:
+| Mode | Name | Description | Issue required? | Stop conditions |
+|------|------|-------------|-----------------|-----------------|
+| `research` | Research | Explore and synthesize findings | No | tasks_complete, committed, pushed |
+| `planning` | Planning | Research, spec, review, approved | **Yes** | tasks_complete, committed, pushed |
+| `implementation` | Implementation | Execute approved specs | **Yes** | tasks_complete, committed, pushed, tests_pass, feature_tests_added |
+| `task` | Task | Combined planning + implementation for small tasks | No | tasks_complete, committed |
+| `freeform` | Freeform | Quick questions and discussion (no phases) | No | *(none — can always exit)* |
+| `verify` | Verify | Execute Verification Plan steps | No | tasks_complete, committed, pushed |
+| `debug` | Debug | Systematic hypothesis-driven debugging | No | tasks_complete, committed, pushed |
+| `onboard` | Onboard | Configure kata for a new project | No | *(none — can always exit)* |
 
-```yaml
-project:
-  name: my-project
-  test_command: npm test
+**Mode aliases:**
 
-spec_path: planning/specs
-research_path: planning/research
-session_retention_days: 7
+- `task` → also: `chore`, `small`
+- `debug` → also: `investigate`
+- `freeform` → also: `question`, `ask`, `help`, `qa`
 
-reviews:
-  spec_review: false
-  code_review: false
-  code_reviewer: null
-```
+`--issue=N` is required for `planning` and `implementation`. It is optional for all other modes.
+
+---
+
+## How it works
+
+### Mode lifecycle
+
+_(content coming in subsequent phases)_
+
+### Context injection
+
+_(content coming in subsequent phases)_
+
+### Planning → Implementation pipeline
+
+_(content coming in subsequent phases)_
+
+### Hook chain
+
+_(content coming in subsequent phases)_
+
+---
+
+## Stop conditions
+
+_(content coming in subsequent phases)_
+
+---
+
+## Command reference
+
+### Core commands
+
+_(content coming in subsequent phases)_
+
+### Other commands
+
+_(content coming in subsequent phases)_
+
+---
+
+## Hooks reference
+
+_(content coming in subsequent phases)_
+
+---
+
+## Configuration (kata.yaml)
+
+_(content coming in subsequent phases)_
+
+---
 
 ## Custom modes
 
-Create a one-off session from a template:
+_(content coming in subsequent phases)_
 
-```bash
-kata enter --template=/tmp/my-workflow.md
-```
-
-Templates are Markdown files with YAML frontmatter defining phases:
-
-```markdown
----
-id: code-review
-name: "Code Review"
-phases:
-  - id: p0
-    name: Read
-    task_config:
-      title: "P0: Read the diff"
-  - id: p1
-    name: Findings
-    task_config:
-      title: "P1: Document findings"
-      depends_on: [p0]
 ---
 
-# Code Review Mode
+## Batteries system
 
-...instructions for Claude...
-```
+_(content coming in subsequent phases)_
 
-## Project-level mode overrides
+---
 
-Add a `.claude/workflows/modes.yaml` to define custom modes alongside or instead of the built-in ones. `kata` merges project modes with the built-in set, with project modes taking precedence.
+## Architecture
 
-## How the hooks work
+_(content coming in subsequent phases)_
 
-`kata setup` registers three hooks in `.claude/settings.json`:
-
-| Hook | Command | What it does |
-|------|---------|--------------|
-| `SessionStart` | `kata hook session-start` | Initializes session registry, injects available modes into context |
-| `UserPromptSubmit` | `kata hook user-prompt` | Detects mode intent from the user's message, suggests entering a mode |
-| `Stop` | `kata hook stop-conditions` | Blocks session end if phase tasks are incomplete |
-
-## Troubleshooting
-
-```bash
-kata doctor           # Diagnose hooks, config, session state
-kata doctor --fix     # Auto-fix common issues
-
-kata init --force     # Hard-reset session state
-kata teardown --yes   # Remove all kata hooks and config
-```
+---
 
 ## Comparison to similar tools
 
@@ -207,6 +236,8 @@ Parses PRDs into structured tasks using AI via MCP. Handles full task lifecycle 
 | **kata** | **Session phase enforcement** | **Stop hook blocks exit** | **Session** |
 
 `kata`'s unique position: the only tool focused on *enforcing that sessions complete correctly* via the Stop hook, rather than helping plan or remember work.
+
+---
 
 ## License
 
