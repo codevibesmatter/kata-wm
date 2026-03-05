@@ -71,7 +71,7 @@ Tell Claude:
 
 > Set up kata for this project
 
-Claude runs `kata setup`, registers the stop hook and session hooks in `.claude/settings.json`, and configures `.kata/kata.yaml` for your project. Alternatively, run `kata enter onboard` yourself — this starts the agent-guided onboarding walkthrough.
+Claude runs `kata setup`, registers the hooks in `.claude/settings.json`, and configures `.kata/kata.yaml` for your project. For a more thorough walkthrough, tell Claude to enter onboard mode — it will interview you about your project and configure everything interactively.
 
 **3. Enter a mode**
 
