@@ -706,19 +706,172 @@ modes:                              # Project-level mode overrides (merged with 
 
 ## Custom modes
 
-_(content coming in subsequent phases)_
+kata ships with a built-in set of modes (planning, implementation, task, bugfix, etc.), but you can define your own to match your team's workflow.
+
+### Creating a custom mode
+
+**Option 1 — CLI scaffold:**
+
+```
+kata init-mode <name>
+```
+
+Creates a template file in `.kata/templates/<name>.md` with frontmatter stubs and registers the mode in `.kata/kata.yaml`.
+
+**Option 2 — Manual:**
+
+1. Write a template file (see schema below).
+2. Register it:
+
+```
+kata register-mode <path-to-template>
+```
+
+---
+
+### Template frontmatter schema
+
+Every mode template starts with YAML frontmatter that defines the mode's phases, tasks, and dependency chain:
+
+```markdown
+---
+id: <string>                # Mode identifier (matches kata.yaml key)
+name: <string>              # Human-readable mode name
+description: <string>       # Brief description
+mode: <string>              # Alias for id (used for display)
+phases:
+  - id: <string>            # Phase ID (e.g. p0, p1)
+    name: <string>          # Phase name (e.g. "Research")
+    task_config:
+      title: <string>       # Title for native TaskCreate task
+      labels: [string]      # Optional task labels
+    steps:                  # Ordered sub-steps Claude follows within this phase
+      - id: <string>        # Step identifier
+        title: <string>     # Step title
+        instruction: |      # Freeform markdown instructions for Claude
+          ...
+    depends_on: [<phase-id>]  # Phases that must complete before this one
+
+# Optional: global rules injected via kata prime
+rules:
+  - <string>
+---
+```
+
+**Key field notes:**
+
+- `steps` defines the sub-tasks inside each phase. Each step becomes one native task visible in Claude's task list.
+- `task_config.title` is the label shown for the phase's native TaskCreate entry.
+- `depends_on` creates the blocking relationship between phases. Phase `p1` will not become available until every phase listed in its `depends_on` array is complete.
+- The body of the template file (the markdown below the frontmatter) is the mode instruction text injected into Claude's context by `kata prime`.
+
+**Real examples in the package:**
+
+- `batteries/templates/planning.md` — a multi-phase mode with complex step trees and spec-writing instructions
+- `batteries/templates/implementation.md` — shows the subphase pattern and code-review integration
+
+---
+
+### Registering the mode in kata.yaml
+
+After creation, the mode appears in the `modes:` section of `.kata/kata.yaml`. All standard mode fields apply:
+
+```yaml
+modes:
+  my-mode:
+    template: my-mode.md         # Relative to .kata/templates/
+    stop_conditions: [tasks_complete, committed]
+    issue_handling: none         # "required" | "none"
+    name: "My Mode"
+    description: "What it does"
+    workflow_prefix: "MM"        # 2-letter prefix for workflow IDs
+    intent_keywords:
+      - "do my thing"
+    aliases:
+      - "mm"
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `template` | yes | Template filename relative to `.kata/templates/` |
+| `stop_conditions` | yes | Exit checks that must pass before `kata exit` is allowed |
+| `issue_handling` | yes | `"required"` (mode entry needs a GitHub issue) or `"none"` |
+| `name` | yes | Display name shown in `kata prime` and task headers |
+| `description` | no | One-line description shown in mode listings |
+| `workflow_prefix` | no | Two-letter prefix for workflow IDs (e.g. `MM-abc123`) |
+| `intent_keywords` | no | Phrases that trigger mode-suggestion in `UserPromptSubmit` hook |
+| `aliases` | no | Short aliases accepted by `kata enter` |
 
 ---
 
 ## Batteries system
 
-_(content coming in subsequent phases)_
+`kata batteries` seeds a project with starter content from the kata package: mode templates, agent definitions, spec stubs, and config files. It is idempotent — safe to re-run at any time. Without `--update`, it never overwrites files that already exist.
+
+### Two use cases
+
+**1. Initial scaffold**
+
+Run once at project setup, or automatically as part of `kata setup --batteries`. Creates the starter templates and config files your project needs to start using kata modes.
+
+**2. Upgrading templates**
+
+After running `npm update @codevibesmatter/kata`, run:
+
+```
+kata batteries --update
+```
+
+This overwrites project files with the latest versions from the updated package. **Commit your customizations first** — `--update` overwrites without merging. Any local edits to template files will be lost.
+
+### Files are yours to own
+
+Files seeded by `kata batteries` are the project's to own and customize. kata does not reference package templates at runtime — it reads from `.kata/templates/` (or `.claude/workflows/templates/` for old-layout projects). Editing, extending, or replacing the seeded templates is encouraged and expected.
+
+See [`kata batteries`](#kata-batteries) for the full list of scaffolded files.
 
 ---
 
 ## Architecture
 
-_(content coming in subsequent phases)_
+### Source layout
+
+| Directory / File | Purpose |
+|-----------------|---------|
+| `src/index.ts` | CLI dispatcher — maps `kata <command>` to handler functions; also re-exports the programmatic API |
+| `src/commands/` | One file per CLI command (`enter.ts`, `exit.ts`, `hook.ts`, `setup.ts`, etc.) |
+| `src/commands/enter/` | Sub-modules for the enter command: `task-factory.ts`, `guidance.ts`, `template.ts`, `spec.ts` |
+| `src/session/lookup.ts` | Project root discovery, session ID resolution, template path resolution |
+| `src/state/` | Zod schema (`schema.ts`), reader/writer for `SessionState` JSON |
+| `src/config/` | `kata-config.ts` loads `.kata/kata.yaml`; `cache.ts` loads and merges `modes.yaml` |
+| `src/validation/` | Phase/template validation |
+| `src/yaml/` | YAML frontmatter parser for template files |
+| `src/utils/` | Workflow ID generation, session cleanup, timestamps |
+| `src/testing/` | Test utilities exported as `@codevibesmatter/kata/testing` |
+
+### Runtime data layout
+
+| Path | Contents |
+|------|---------|
+| `.kata/sessions/{sessionId}/state.json` | Per-session `SessionState` — mode, phase, workflow ID, issue number |
+| `.kata/kata.yaml` | Project config (`WmConfig`) — commands, spec paths, mode overrides |
+| `.kata/templates/` | Project-owned mode templates (seeded by batteries, customizable) |
+| `.kata/verification-evidence/` | Output from verify mode runs |
+| `~/.claude/tasks/{sessionId}/` | Native task files (Claude-owned, created by `kata enter`) |
+| `.claude/settings.json` | Hook registration (Claude-owned) |
+| `.claude/agents/` | Agent definitions (review-agent, impl-agent, etc.) |
+
+### Hook registration
+
+Hooks are registered in `.claude/settings.json` using the `kata hook <name>` dispatch pattern. Each hook reads Claude Code's stdin JSON, extracts `session_id`, and outputs a JSON decision. The session ID from hook stdin must be forwarded as `--session=ID` to any subcommand — there is no automatic session detection at hook time.
+
+### Backwards compatibility
+
+Projects using `.claude/workflows/` instead of `.kata/` are supported. `getKataDir()` checks for `.kata/` first and falls back to `.claude/workflows/`. All path helpers (`getSessionsDir()`, `getProjectTemplatesDir()`, etc.) handle both layouts transparently, so existing projects do not need to migrate.
+
+### Eval harness
+
+An agentic eval harness in `eval/` drives Claude agents through kata scenarios with real tool execution, used for regression testing kata's workflow enforcement. See `eval/README.md` for details.
 
 ---
 
