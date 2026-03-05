@@ -35,11 +35,11 @@ The root problem: Claude has no obligation to finish. Sessions are fire-and-forg
 
 **kata adds the enforcement layer.** When you enter a mode (`kata enter planning`, `kata enter implementation`), kata:
 
-1. Creates native phase tasks with dependency chains — Claude sees them via `TaskList` and must complete them in order
-2. Registers a Stop hook that fires whenever Claude tries to end the session — if tasks are incomplete, changes uncommitted, or tests failing, the session is **blocked**
-3. Persists session state to disk so context compaction doesn't lose the mode, phase, or pending work
+1. **Creates native phase tasks with dependency chains** — Claude sees them via `TaskList` and must complete them in order
+2. **Injects mode context at session start** — a `SessionStart` hook calls `kata prime`, which injects the active mode's instructions, current phase, and pending task list into Claude's context at the start of every conversation. Claude always knows what it's doing, even after a context compaction reset.
+3. **Blocks exit via Stop hook** — whenever Claude tries to end the session, the hook checks every stop condition for that mode (tasks complete, changes committed, tests passing). If anything's missing, the session is blocked with a clear list of what's left.
 
-The stop hook is the key mechanism. Claude cannot exit until every condition for that mode is met. No more half-done sessions.
+The combination is what makes it work: context injection means Claude always knows the plan; the stop hook means it can't declare victory before the plan is done.
 
 ---
 
