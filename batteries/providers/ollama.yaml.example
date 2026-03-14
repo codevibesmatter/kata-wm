@@ -1,0 +1,51 @@
+# Example provider plugin for Ollama (local LLMs)
+#
+# To use: copy this file to .kata/providers/ollama.yaml
+# Then: kata agent-run --prompt=code-review --provider=ollama
+#
+# Provider plugins define how to invoke a CLI-based LLM tool.
+# kata handles prompt assembly, context injection, and output parsing.
+
+name: ollama
+command: ollama
+
+# Static args prepended before model/prompt
+args: [run]
+
+# How the prompt reaches the CLI:
+#   stdin: pipe prompt to stdin (default)
+#   flag:  pass via a CLI flag (set prompt_flag)
+prompt_delivery: stdin
+
+# How to pass the model:
+#   --model:  flag-based, e.g. "--model llama3.3"
+#   null:     positional arg, e.g. "ollama run llama3.3"
+model_flag: null
+
+# Output parsing:
+#   text:   raw stdout (most CLIs)
+#   jsonl:  parse JSONL for agent_message events (codex-style)
+output_format: text
+
+# Flags always appended for autonomous mode (empty = none needed)
+bypass_flags: []
+
+# Default model when --model not specified
+default_model: llama3.3
+
+# Known models (shown in --list-tools, used for validation)
+models:
+  - id: llama3.3
+    description: Meta Llama 3.3 70B
+    default: true
+  - id: qwen3
+    description: Qwen 3 235B MoE
+  - id: deepseek-r1
+    description: DeepSeek R1
+
+# What this provider supports
+capabilities:
+  tool_filtering: false   # Can filter individual tools? (only Claude supports this)
+  max_turns: false         # Supports max turn control?
+  text_only: true          # Can run without any tools?
+  permission_bypass: always # How bypass works: sdk | cli-flag | always

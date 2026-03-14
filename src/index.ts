@@ -356,5 +356,7 @@ export {
 } from './providers/index.js'
 export type { AgentProvider, AgentRunOptions, ProviderCapabilities } from './providers/types.js'
 export { CANONICAL_TOOLS, isAllTools } from './providers/types.js'
+export { createCliProvider, loadProviderPlugins } from './providers/cli-provider.js'
+export type { CliProviderConfig } from './providers/cli-provider.js'
 export type { PreparedPrompt } from './providers/prompt.js'
 export type { StepContext, StepRunResult } from './providers/step-runner.js'

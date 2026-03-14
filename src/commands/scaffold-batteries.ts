@@ -3,13 +3,14 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { dirname } from 'node:path'
-import { getPackageRoot, getProjectTemplatesDir, getProjectPromptsDir, getProjectInterviewsPath, getProjectSubphasePatternsPath, getProjectVerificationToolsPath, getKataDir } from '../session/lookup.js'
+import { getPackageRoot, getProjectTemplatesDir, getProjectPromptsDir, getProjectProvidersDir, getProjectInterviewsPath, getProjectSubphasePatternsPath, getProjectVerificationToolsPath, getKataDir } from '../session/lookup.js'
 import { getKataConfigPath } from '../config/kata-config.js'
 
 export interface BatteriesResult {
   templates: string[]
   agents: string[]
   prompts: string[]
+  providerPlugins: string[]
   specTemplates: string[]
   githubTemplates: string[]
   interviews: string[]
@@ -101,6 +102,7 @@ export function scaffoldBatteries(projectRoot: string, update = false): Batterie
     templates: [],
     agents: [],
     prompts: [],
+    providerPlugins: [],
     specTemplates: [],
     githubTemplates: [],
     interviews: [],
@@ -163,6 +165,17 @@ export function scaffoldBatteries(projectRoot: string, update = false): Batterie
     result.updated,
     update,
     backupRoot ? join(backupRoot, 'prompts') : undefined,
+  )
+
+  // Provider plugins → .kata/providers/ (example files only, never overwritten)
+  copyDirectory(
+    join(batteryRoot, 'providers'),
+    getProjectProvidersDir(projectRoot),
+    result.providerPlugins,
+    result.skipped,
+    result.updated,
+    update,
+    backupRoot ? join(backupRoot, 'providers') : undefined,
   )
 
   // Spec templates → planning/spec-templates/

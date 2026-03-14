@@ -184,6 +184,14 @@ export function getProjectPromptsDir(projectRoot?: string): string {
 }
 
 /**
+ * Get path to project providers directory
+ */
+export function getProjectProvidersDir(projectRoot?: string): string {
+  const root = projectRoot ?? findProjectDir()
+  return resolveKataPath(root, 'providers')
+}
+
+/**
  * Get path to verification evidence directory
  */
 export function getVerificationDir(projectRoot?: string): string {
