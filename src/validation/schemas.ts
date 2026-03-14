@@ -31,6 +31,15 @@ export const agentStepConfigSchema = z.object({
   gate: z.boolean().optional(),
   /** Minimum score (0-100) to pass the gate. Default: 75. */
   threshold: z.number().min(0).max(100).optional(),
+
+  // ── Agent capability options (forwarded to provider.run) ──
+
+  /** Tools the agent can use. Default: [] (text-only, no tools). */
+  allowed_tools: z.array(z.string()).optional(),
+  /** Max agentic turns. Default: 3 (review/judge mode). */
+  max_turns: z.number().min(1).optional(),
+  /** Execution timeout in seconds. Default: 300 (5 min). */
+  timeout: z.number().min(1).optional(),
 })
 
 /**

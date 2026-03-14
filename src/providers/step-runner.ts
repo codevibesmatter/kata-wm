@@ -213,6 +213,9 @@ export async function runAgentStep(
     cwd: context.cwd,
     model: config.model,
     env,
+    ...(config.allowed_tools && { allowedTools: config.allowed_tools }),
+    ...(config.max_turns && { maxTurns: config.max_turns }),
+    ...(config.timeout && { timeoutMs: config.timeout * 1000 }),
   })
 
   // 7. Extract score if applicable

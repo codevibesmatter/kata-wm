@@ -31,6 +31,7 @@ import { modes } from './commands/modes.js'
 import { checkPhase } from './commands/check-phase.js'
 import { providers as providersCommand } from './commands/providers.js'
 import { review as reviewCommand } from './commands/review.js'
+import { agentRun as agentRunCommand } from './commands/agent-run.js'
 import { postmortem } from './commands/postmortem.js'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -176,6 +177,10 @@ async function main() {
         await reviewCommand(commandArgs)
         break
 
+      case 'agent-run':
+        await agentRunCommand(commandArgs)
+        break
+
       case 'postmortem':
         await postmortem(commandArgs)
         break
@@ -244,8 +249,8 @@ Usage:
   kata batteries [--update] [--cwd=PATH]           Scaffold batteries-included starter content
   kata config [--show]                            Show resolved config with provenance
   kata providers [list|setup] [--json]             Check/configure agent providers
-  kata review --prompt=<name> [--provider=P]       Run ad-hoc agent review
-  kata review --list                               List available prompt templates
+  kata agent-run --prompt=<name> [options]           Run agent with prompt + tools
+  kata review --prompt=<name> [--provider=P]       Review shortcut (auto-context)
   kata projects <subcommand> [options]             Multi-project management
   kata teardown [--yes] [--all] [--dry-run]      Remove kata from a project
   kata hook <name>                               Dispatch hook event (for settings.json)
