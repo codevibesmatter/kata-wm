@@ -2,12 +2,10 @@
  * Codex provider — wraps OpenAI's Codex CLI.
  *
  * Spawns `codex exec` with the prompt via stdin, parses JSONL output
- * for agent messages. Uses --dangerously-bypass-approvals-and-sandbox for full autonomy.
+ * for agent messages. Uses --dangerously-bypass-approvals-and-sandbox (fail-open).
  *
- * Tool control: Codex CLI supports --full-auto (safe ops only) and
- * --dangerously-bypass-approvals-and-sandbox (all ops). No per-tool filtering.
- * When allowedTools is empty/undefined, we still bypass since the CLI has
- * no text-only mode — the prompt itself must constrain behavior.
+ * Always bypasses — without it the CLI blocks on approval prompts,
+ * which hangs headless agents. No per-tool filtering available.
  */
 
 import { spawn } from 'node:child_process'

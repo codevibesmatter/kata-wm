@@ -5,6 +5,10 @@
  * with full agent capabilities (tool use, file access, reasoning).
  * Used by eval judge, code review gates, spec review, and any
  * prompt-in/text-out agent task.
+ *
+ * Design: fail-open by default. All providers bypass permissions
+ * unless explicitly configured otherwise. This is intentional —
+ * kata agents run headless and must not block on approval prompts.
  */
 
 export interface ThinkingLevel {
@@ -73,7 +77,11 @@ export interface AgentRunOptions {
   allowedTools?: string[]
   /** Max agentic turns. Default: 3 (judge/review mode). */
   maxTurns?: number
-  /** Permission mode. Default: 'bypassPermissions'. */
+  /**
+   * Permission mode for the agent session.
+   * Default: 'bypassPermissions' (fail-open — agents run headless).
+   * Set explicitly to override, e.g. 'default' for interactive approval.
+   */
   permissionMode?: string
   /** Settings sources to load (e.g., ['project'] for .claude/settings.json). Default: []. */
   settingSources?: string[]

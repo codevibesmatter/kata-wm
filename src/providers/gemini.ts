@@ -1,14 +1,11 @@
 /**
  * Gemini provider — wraps Google's Gemini CLI.
  *
- * Spawns `gemini` with --yolo for autonomous execution.
+ * Spawns `gemini` with --yolo for autonomous execution (fail-open).
  * Prompt delivered via -p flag (stdin not supported by gemini CLI).
  *
- * Tool control: Gemini CLI doesn't support per-tool filtering.
- * --yolo enables all tools with auto-approval. Without --yolo,
- * the CLI prompts for each tool use (not usable headless).
- * When allowedTools is empty/undefined, we still pass --yolo since
- * the CLI has no text-only mode — the prompt itself must constrain behavior.
+ * --yolo is always passed — without it the CLI blocks on approval prompts,
+ * which hangs headless agents. No per-tool filtering available.
  */
 
 import { spawnSync } from 'node:child_process'

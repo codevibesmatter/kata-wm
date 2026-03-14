@@ -5,7 +5,9 @@
  * - Text-only (default): maxTurns=3, no tools — for judge/review tasks.
  * - Full-agent: pass allowedTools, maxTurns, settingSources for agentic sessions.
  *
- * The SDK picks its own default model when none is specified.
+ * Permission bypass: always on by default (fail-open). The SDK's default
+ * is interactive approval, but kata agents run headless — blocking on
+ * permission prompts would hang. Override with permissionMode if needed.
  */
 
 import { createRequire } from 'node:module'
